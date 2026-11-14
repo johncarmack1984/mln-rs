@@ -20,18 +20,52 @@ The other `publish = false` packages (the desktop app, the browser build in
 examples/web and crates/mln_web_shaper, the expression test runner) are not
 released.
 
-## Cutting a release
+## Releasing a version
 
-1. Bump the version in `Cargo.toml`: `[workspace.package] version` and the
-   `=<version>` of every in-repo entry in `[workspace.dependencies]`. A missed
-   one fails every cargo command. Run `cargo check` to update `Cargo.lock` and
-   merge that change to main. crates.io never replaces a published version.
-2. Run the **release** workflow on main: `mise run release`, or Actions →
-   release → Run workflow.
+On every push to main, the release workflow has
+[release-plz](https://release-plz.dev) (`release-plz.toml`) open a pull request
+for the next release, "Release v<version>", or update the one it opened. It
+changes:
 
-If the workflow fails part way, run it again on the same commit: packages that
-crates.io already has at this version are skipped, and so is an existing GitHub
-release. If the fix changes a package, bump the version instead.
+- the version in `Cargo.toml`: `[workspace.package] version` and the
+  `=<version>` of every in-repo entry in `[workspace.dependencies]`, and
+  `Cargo.lock`;
+- `CHANGELOG.md`: the subjects of the commits since the last release that
+  changed a published package, newest first.
+
+[cargo-semver-checks](https://github.com/obi1kenobi/cargo-semver-checks) picks
+the version: it compares each library with its release on crates.io. A change
+that breaks a library's API bumps the minor version (0.1.3 to 0.2.0), and any
+other change the patch (0.1.3 to 0.1.4). The packages share their version, so
+they all take the largest bump. The pull request lists each package's result and
+the breaks found. cargo-semver-checks doesn't catch every break: for one it
+misses, set the version by hand (below).
+
+To release, merge the pull request. The workflow then publishes the packages,
+tags the commit `v<version>` and creates a GitHub release with the version's
+part of `CHANGELOG.md`. crates.io never replaces a published version.
+
+Before merging, you can edit the changelog, or set another version on the pull
+request's branch with `release-plz set-version <version>`, which also updates
+the `=<version>` entries, `Cargo.lock` and the changelog. Then merge it before
+anything else: on the next push to main, release-plz replaces a release pull
+request that has commits besides its own with a new one.
+
+### Releasing 0.1.0
+
+From a 0.0.x version, release-plz bumps only the patch, breaking change or not:
+it leaves the step to 0.1.0 to the maintainers. Take it on the first release
+pull request, which proposes 0.0.12: run `release-plz set-version 0.1.0` on its
+branch, push, and merge it. From 0.1.0 on, a patch release is compatible, so a
+dependency on `mln-rs = "0.1"` takes it.
+
+## When a release fails
+
+If the workflow fails part way, run it again on the same commit (Re-run jobs on
+the failed run): packages that crates.io already has at this version are
+skipped, and so is an existing GitHub release. `mise run release`, or Actions →
+release → Run workflow, runs it on main's latest commit, and so does the next
+push to main. If the fix changes a package, release a new version instead.
 
 crates.io limits how many new crates an account can publish in a short time. The
 first release after adding libraries runs into it: the workflow waits and
@@ -40,20 +74,26 @@ again continues. To avoid the wait, ask help@crates.io to raise the limit first.
 
 ## What the workflow does
 
-`.github/workflows/release.yml`:
+`.github/workflows/release.yml` runs on every push to main, and when run by
+hand. In a fork, it does nothing.
 
-1. Checks out this repository. It needs no C++ checkout.
-2. Installs stable Rust and runs `cargo package --workspace --locked` (without
-   the desktop app). It packages every crate and builds each one from its
-   packaged sources. The packages resolve each other locally, so this works
-   before any of them is on crates.io.
-3. Publishes the packages crates.io does not have at this version
-   (`cargo publish --workspace --exclude …`), in dependency order. When
-   crates.io answers 429, it waits 10 minutes and continues.
-4. Creates the tag `v<version>` on the workflow's commit and a GitHub release
-   with the `.crate` files.
+1. `version` checks whether crates.io has mln-rs at the version in `Cargo.toml`.
+   It checks out only `Cargo.toml` and builds nothing.
+2. If crates.io doesn't, or the workflow was run by hand, `release`:
+   1. Checks out this repository. It needs no C++ checkout.
+   2. Installs stable Rust and runs `cargo package --workspace --locked`
+      (without the desktop app). It packages every crate and builds each one
+      from its packaged sources. The packages resolve each other locally, so
+      this works before any of them is on crates.io.
+   3. Publishes the packages crates.io does not have at this version
+      (`cargo publish --workspace --exclude …`), in dependency order. When
+      crates.io answers 429, it waits 10 minutes and continues.
+   4. Creates the tag `v<version>` on the workflow's commit and a GitHub release
+      with the `.crate` files and the version's part of `CHANGELOG.md`.
+3. After a push, `release-pr` runs `release-plz release-pr`, which opens or
+   updates the release pull request.
 
-CI (`release-crate` in `ci.yml`, `mise run ci:package`) runs step 2 on every
+CI (`release-crate` in `ci.yml`, `mise run ci:package`) runs step 2.2 on every
 push and PR. It catches a manifest crates.io would reject.
 
 ## Locally
@@ -64,6 +104,12 @@ mise run package
 
 On NixOS, run it inside `nix develop` if a build script cannot find a C
 compiler.
+
+`release-plz update` makes the release pull request's changes in your checkout.
+With cargo-semver-checks installed
+(`cargo install --locked release-plz cargo-semver-checks`), it also checks the
+APIs and prints what broke. Run it in a clone: in a linked worktree, it checks
+out another branch.
 
 ## Adding a library
 
@@ -79,13 +125,16 @@ A new library under `crates/` or `vendor/` needs:
   warning that it is an internal crate (with its `mln_rs::<name>` path) and say
   what it ports. Cargo packages it without a `readme` key;
 - an entry in `[workspace.dependencies]` in the root `Cargo.toml`;
+- an entry in mln-rs's `changelog_include` in `release-plz.toml`, so that its
+  commits are in the changelog;
 - a dependency of mln-rs (root `[dependencies]`) and a `pub use` in
   `src/lib.rs`.
 
 A library that should not be released gets `publish = false` instead of the
-README and the last two steps; test tooling the difftests use gets the README
-(without the `mln_rs::<name>` path) and the workspace entry, but no mln-rs
-dependency. A new third-party crate goes into `[workspace.dependencies]` only.
+README and the last three steps; test tooling the difftests use gets the README
+(without the `mln_rs::<name>` path), the workspace entry and the
+`changelog_include` entry, but no mln-rs dependency. A new third-party crate
+goes into `[workspace.dependencies]` only.
 
 ## Secrets and settings
 
@@ -95,10 +144,21 @@ dependency. A new third-party crate goes into `[workspace.dependencies]` only.
   tokens can expire, so renew it when it does. The account needs a verified
   email address to publish. After the first release, `cargo owner --add <user>`
   adds co-owners.
-- **Workflow permissions**: the workflow asks for `contents: write` to push the
-  tag and create the release. That works with the default repository setting
-  (Settings → Actions → General). An organization or enterprise policy that caps
-  `GITHUB_TOKEN` at read-only would block it.
+- **Allow GitHub Actions to create and approve pull requests** (Settings →
+  Actions → General → Workflow permissions): without it, the workflow's default
+  token can't open the release pull request.
+- **`RELEASE_PLZ_TOKEN`** (repository secret, optional): a pull request that the
+  default token opens starts no workflows, so CI doesn't run on the release pull
+  request until someone closes and reopens it. A fine-grained personal access
+  token here, with read and write access to this repository's contents and pull
+  requests, opens it instead, as the token's account, and CI runs.
+  (maplibre/martin uses a GitHub App, whose token a step creates on each run.)
+- **Workflow permissions**: `release` asks for `contents: write` to push the tag
+  and create the release, and `release-pr` for `contents: write` and
+  `pull-requests: write` to push the pull request's branch and open it. That
+  works with the default repository setting (Settings → Actions → General). An
+  organization or enterprise policy that caps `GITHUB_TOKEN` at read-only would
+  block it.
 - **Tag rules**: a ruleset or tag protection that covers `v*` must let GitHub
   Actions create tags.
-- The workflow refuses to run on any branch other than the default branch.
+- The workflow refuses to release from any branch other than the default branch.

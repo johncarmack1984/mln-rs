@@ -1,27 +1,72 @@
 name: release
 
-# Publishes the workspace in Cargo.toml to crates.io at its version: mln-rs
-# and its internal mln-rs-* crates. Then tags the commit v<version>
-# and creates a GitHub release. See RELEASING.md. Rerunning after a partial
-# failure finishes the job: packages crates.io already has at this version
-# are skipped.
+# Releases the workspace in Cargo.toml: mln-rs and its internal mln-rs-*
+# crates, all at the workspace's version (RELEASING.md). On every push to
+# main, `version` checks whether crates.io has mln-rs at that version. Once
+# the release pull request merges, it doesn't: `release` publishes the
+# packages, tags the commit v<version> and creates a GitHub release. Then
+# `release-pr` has release-plz open or update the pull request for the next
+# release (release-plz.toml). Running the workflow by hand runs `release`
+# again, which finishes a release that failed part way: packages crates.io
+# already has at this version are skipped.
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
-concurrency:
-  group: release
-  cancel-in-progress: false
-
 permissions:
-  contents: write # the tag and the GitHub release
+  contents: read
+
+env:
+  USER_AGENT: mln-rs-release (${{ github.server_url }}/${{ github.repository }})
 
 jobs:
+  # A few seconds, so that a push that releases nothing costs no more. Forks
+  # release nothing.
+  version:
+    if: ${{ !github.event.repository.fork }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    outputs:
+      published: ${{ steps.version.outputs.published }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: Cargo.toml
+          sparse-checkout-cone-mode: false
+
+      - name: Check crates.io for the version
+        id: version
+        run: |
+          version=$(python3 -I -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')
+          status=$(curl -s --retry 3 -o /dev/null -w '%{http_code}' -A "$USER_AGENT" "https://crates.io/api/v1/crates/mln-rs/$version")
+          case $status in
+            200) published=true ;;
+            404) published=false ;;
+            *)
+              echo "::error::crates.io answered $status for mln-rs $version."
+              exit 1
+              ;;
+          esac
+          echo "mln-rs $version on crates.io: $published"
+          echo "published=$published" >> "$GITHUB_OUTPUT"
+
   release:
+    needs: version
+    if:
+      github.event_name == 'workflow_dispatch' ||
+      needs.version.outputs.published == 'false'
     runs-on: ubuntu-26.04
     # The publish step waits out crates.io's limit on new crates, which the
     # first release of new packages runs into.
     timeout-minutes: 360
+    permissions:
+      contents: write # the tag and the GitHub release
+    concurrency:
+      group: release
+      cancel-in-progress: false
     steps:
       - name: Require the default branch
         if:
@@ -59,7 +104,6 @@ jobs:
       - name: Publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-          USER_AGENT: mln-rs-release (https://github.com/louwers/mln-rs)
         run: |
           set -o pipefail
           while true; do
@@ -81,6 +125,8 @@ jobs:
             sleep 600
           done
 
+      # The release notes are the version's section of CHANGELOG.md, which
+      # the release pull request wrote, or else a link to crates.io.
       - name: Tag and create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -90,11 +136,60 @@ jobs:
             echo "The $tag release exists."
             exit 0
           fi
+          notes="$RUNNER_TEMP/notes.md"
+          if [[ -f CHANGELOG.md ]]; then
+            awk -v heading="## [$VERSION]" '
+              index($0, heading) == 1 { found = 1; next }
+              found && /^## / { exit }
+              found
+            ' CHANGELOG.md > "$notes"
+          fi
+          if [[ ! -s $notes ]]; then
+            echo "https://crates.io/crates/mln-rs/$VERSION" > "$notes"
+          fi
           files=()
           for package in $PACKAGES; do
             files+=("target/package/$package-$VERSION.crate")
           done
           gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "$tag" \
-            --notes "https://crates.io/crates/mln-rs/$VERSION" \
+            --notes-file "$notes" \
             "${files[@]}"
+
+  # After `release`, so that release-plz compares the packages with what
+  # crates.io has, including a release this push just published. Not after a
+  # release that failed or timed out.
+  release-pr:
+    needs: [version, release]
+    if: >-
+      !cancelled() && github.event_name == 'push' && needs.version.result ==
+      'success' && (needs.release.result == 'success' || needs.release.result ==
+      'skipped')
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    permissions:
+      contents: write # the pull request's branch
+      pull-requests: write
+    concurrency:
+      group: release-pr
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The commits since the last release.
+          fetch-depth: 0
+          persist-credentials: false
+
+      # For cargo-semver-checks, which the action installs.
+      - name: Install Rust
+        run: |
+          rustup toolchain install --profile minimal --no-self-update
+
+      # A pull request opened with the default token starts no workflows, so
+      # CI doesn't run on it; one opened with RELEASE_PLZ_TOKEN does
+      # (RELEASING.md).
+      - uses: release-plz/action@v0.5
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN || github.token }}
