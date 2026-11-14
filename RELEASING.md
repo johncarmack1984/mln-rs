@@ -50,6 +50,11 @@ To release, merge the pull request. The release workflow then publishes the
 packages, tags the commit `v<version>` and creates a GitHub release with the
 version's part of `CHANGELOG.md`. crates.io never replaces a published version.
 
+release-plz updates the pull request only at night. If anything merged after
+that, run release-pr by hand and wait for it to update the pull request before
+you merge it: otherwise those changes go out under a version cargo-semver-checks
+didn't check them against.
+
 Before merging, you can edit the changelog, or set another version on the pull
 request's branch with `release-plz set-version <version>`, which also updates
 the `=<version>` entries, `Cargo.lock` and the changelog. Then merge it before
