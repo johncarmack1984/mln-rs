@@ -205,8 +205,9 @@ jobs:
   # frame compared with the native runner's render of the same view
   # (lavapipe). Twice: the module that draws with WebGPU, and the one that
   # draws with WebGL2 for browsers without it. Then the C library's browser
-  # packages. The Chromium is Playwright's build, pinned, and runs them all on
-  # the SwiftShader it bundles.
+  # packages, and last the page on a module built without tile workers. The
+  # Chromium is Playwright's build, pinned, and runs them all on the
+  # SwiftShader it bundles.
   web:
     runs-on: ubuntu-26.04
     timeout-minutes: 40
@@ -275,6 +276,21 @@ jobs:
       - name: Test the page's wheel reading
         run: pnpm -C examples/web test
 
+      # The WebGPU module built without the `tile-workers` feature, in place
+      # of the default one: the page type-checks and builds on its bindings,
+      # and starts none of the tile workers it asks for. With the release
+      # build's settings, only mln_web_host and the module build again; one
+      # view.
+      - name: Check the page on a module without tile workers
+        env:
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: s
+        run: |
+          cargo build --profile release --target wasm32-unknown-unknown -p mln-rs-web --no-default-features
+          wasm-bindgen --target web --out-dir examples/web/web/pkg "${CARGO_TARGET_DIR:-target}/wasm32-unknown-unknown/release/mln_web.wasm"
+          pnpm -C examples/web typecheck
+          pnpm -C examples/web build
+          node examples/web/check/check.mjs --filter '^real-world/chicago$' --expect-workers 0 --out "$RUNNER_TEMP/web-check-module-without-workers"
+
       # Each view's style, the page's frame (expected.png) and the native
       # render and diff (results/).
       - name: Upload the frames and diffs
@@ -287,6 +303,7 @@ jobs:
             ${{ runner.temp }}/web-check-webgl2
             ${{ runner.temp }}/web-check-no-workers
             ${{ runner.temp }}/web-check-webgl2-no-workers
+            ${{ runner.temp }}/web-check-module-without-workers
           if-no-files-found: ignore
 
   # The one check for branch protection to require: it fails when a job above

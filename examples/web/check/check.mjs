@@ -4,7 +4,7 @@
 // render of the same view (pixelmatch, as the render tests compare). It
 // fails when a frame differs by more than its threshold, when the page, one of
 // its Web Workers (the map's or a tile worker's) or the native runner reports
-// an error, when the map has another number of tile workers than `--workers`,
+// an error, when the map has another number of tile workers than expected,
 // or when it has some and a view's tiles got no worker replies. The interaction
 // views drag on the map back and forth before their frame, over a slow
 // network, and also fail when the map fetches URLs again. It also makes the
@@ -18,9 +18,10 @@
 //
 //   --filter <regex>     the views of VIEWS (views.mjs) to load, by name
 //                        (default: all)
-//   --workers <n>        Web Workers for the tiles (default 2), which the map
-//                        must have: 0 for a module built without the
-//                        `tile-workers` feature
+//   --workers <n>        Web Workers for the tiles (default 2)
+//   --expect-workers <n> the tile workers the map must have (default:
+//                        --workers): 0 for a module built without the
+//                        `tile-workers` feature, which starts none
 //   --out <dir>          where the views, frames and results go
 //                        (default: a new temporary directory)
 //   --render-test <path> the native runner (default:
@@ -74,6 +75,7 @@ const { values: options } = parseArgs({
   options: {
     filter: { type: "string", default: "" },
     workers: { type: "string", default: "2" },
+    "expect-workers": { type: "string" },
     out: { type: "string" },
     "render-test": { type: "string" },
     codec: { type: "string" },
@@ -82,6 +84,7 @@ const { values: options } = parseArgs({
   },
 });
 const workers = Number(options.workers);
+const expectedWorkers = Number(options["expect-workers"] ?? options.workers);
 if (!["webgpu", "webgl2"].includes(options.backend))
   throw new Error(`--backend is webgpu or webgl2, not ${options.backend}`);
 const icd =
@@ -109,7 +112,7 @@ try {
     ["map", "the map's instance"],
     ["tile", "a tile worker's instance"],
   ]) {
-    if (where === "tile" && workers === 0) {
+    if (where === "tile" && expectedWorkers === 0) {
       console.log(
         `a panic in ${instance}: not checked, the map has no tile workers`,
       );
@@ -182,15 +185,16 @@ async function compare() {
       failures.push(
         `${view.name}: ${errors.length} errors in the page or its workers`,
       );
-    // The map has the tile workers the check asked for: none on a module
-    // built without the `tile-workers` feature, which takes `--workers 0`.
-    // Every view has tiles, and only their workers reply: the raster and
-    // raster-dem tiles' too, in the views that have nothing else.
-    if (stats.workers !== workers)
+    // The map has the tile workers it should: as many as the page asked for,
+    // or none on a module built without the `tile-workers` feature
+    // (`--expect-workers 0`). Every view has tiles, and only their workers
+    // reply: the raster and raster-dem tiles' too, in the views that have
+    // nothing else.
+    if (stats.workers !== expectedWorkers)
       failures.push(
-        `${view.name}: the map has ${stats.workers} tile workers, not ${workers}`,
+        `${view.name}: the map has ${stats.workers} tile workers, not ${expectedWorkers}`,
       );
-    if (workers > 0 && stats.replies === 0)
+    if (expectedWorkers > 0 && stats.replies === 0)
       failures.push(`${view.name}: no worker replies`);
     if (again && again.count > MAX_REPEATS) {
       const urls = again.urls
@@ -233,7 +237,7 @@ async function compare() {
   }
   console.log(
     `\nnative render (${runner}${options.codec ? `, codec with ${options.codec} instances` : ""}) ` +
-      `against the page's frame, ${workers} tile workers:`,
+      `against the page's frame, ${expectedWorkers} tile workers:`,
   );
   for (const view of written) {
     const result = native.results.get(view.name);
