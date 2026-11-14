@@ -4,8 +4,8 @@
 // render of the same view (pixelmatch, as the render tests compare). It
 // fails when a frame differs by more than its threshold, when the page, one of
 // its Web Workers (the map's or a tile worker's) or the native runner reports
-// an error, or when a view's tiles got no worker replies while the map has
-// tile workers. The interaction
+// an error, when the map has another number of tile workers than `--workers`,
+// or when it has some and a view's tiles got no worker replies. The interaction
 // views drag on the map back and forth before their frame, over a slow
 // network, and also fail when the map fetches URLs again. It also makes the
 // map's wasm instance and a tile worker's panic (the page's `panic`), and
@@ -18,7 +18,9 @@
 //
 //   --filter <regex>     the views of VIEWS (views.mjs) to load, by name
 //                        (default: all)
-//   --workers <n>        Web Workers for the tiles (default 2)
+//   --workers <n>        Web Workers for the tiles (default 2), which the map
+//                        must have: 0 for a module built without the
+//                        `tile-workers` feature
 //   --out <dir>          where the views, frames and results go
 //                        (default: a new temporary directory)
 //   --render-test <path> the native runner (default:
@@ -96,9 +98,6 @@ const server = await startServer({ root, views, fixtures });
 const browser = await launch(options.chromium);
 const context = { browser, server, workers, backend: options.backend };
 let failures = [];
-// Whether the page started tile workers for a view: not with `--workers 0`,
-// nor on a module built without the `tile-workers` feature.
-let tileWorkers = false;
 try {
   const gpu = await webgpuAdapter(context);
   console.log(`WebGPU adapter: ${gpu}`);
@@ -110,7 +109,7 @@ try {
     ["map", "the map's instance"],
     ["tile", "a tile worker's instance"],
   ]) {
-    if (where === "tile" && !tileWorkers) {
+    if (where === "tile" && workers === 0) {
       console.log(
         `a panic in ${instance}: not checked, the map has no tile workers`,
       );
@@ -183,11 +182,16 @@ async function compare() {
       failures.push(
         `${view.name}: ${errors.length} errors in the page or its workers`,
       );
+    // The map has the tile workers the check asked for: none on a module
+    // built without the `tile-workers` feature, which takes `--workers 0`.
     // Every view has tiles, and only their workers reply: the raster and
     // raster-dem tiles' too, in the views that have nothing else.
-    if (stats.workers > 0 && stats.replies === 0)
+    if (stats.workers !== workers)
+      failures.push(
+        `${view.name}: the map has ${stats.workers} tile workers, not ${workers}`,
+      );
+    if (workers > 0 && stats.replies === 0)
       failures.push(`${view.name}: no worker replies`);
-    if (stats.workers > 0) tileWorkers = true;
     if (again && again.count > MAX_REPEATS) {
       const urls = again.urls
         .slice(0, 3)
