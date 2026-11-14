@@ -9,7 +9,9 @@
 # on crates.io: a change that breaks one's API bumps the minor version (0.1.3
 # to 0.2.0), and any other change the patch (0.1.3 to 0.1.4). Every package
 # inherits the workspace's version, so all of them take the largest bump. From
-# 0.0.x, release-plz bumps only the patch.
+# 0.0.x, release-plz bumps only the patch. The checks build for Linux, so a
+# break in code that only other targets build needs the version set by hand
+# (RELEASING.md).
 semver_check = true
 # One changelog, mln-rs's (below).
 changelog_update = false

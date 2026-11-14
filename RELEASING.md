@@ -37,9 +37,14 @@ changes:
 the version: it compares each library with its release on crates.io. A change
 that breaks a library's API bumps the minor version (0.1.3 to 0.2.0), and any
 other change the patch (0.1.3 to 0.1.4). The packages share their version, so
-they all take the largest bump. The pull request lists each package's result and
-the breaks found. cargo-semver-checks doesn't catch every break: for one it
-misses, set the version by hand (below).
+they all take the largest bump. The pull request lists the packages whose API
+broke.
+
+cargo-semver-checks builds the libraries for Linux, so it doesn't see what only
+other targets build: all of mln-rs-mtl (Apple platforms) and mln-rs-web-host
+(the browser), and any item behind a `cfg` for another platform. It doesn't
+catch every break either. For a break it misses, set the version by hand
+(below).
 
 To release, merge the pull request. The workflow then publishes the packages,
 tags the commit `v<version>` and creates a GitHub release with the version's
