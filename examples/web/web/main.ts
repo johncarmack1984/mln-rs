@@ -1,7 +1,7 @@
 // The page: it runs no wasm itself. It compiles the module, gives its canvas
 // to the map's Web Worker (map-worker.ts) as an OffscreenCanvas, and starts
-// the tile workers' Web Workers (worker.ts) while the module compiles, each
-// connected to the map's by a MessageChannel, so that their requests and
+// the tile workers' Web Workers (worker.ts) once the module has compiled,
+// each connected to the map's by a MessageChannel, so that their requests and
 // replies never pass through this thread. Each Web Worker instantiates the
 // same module with its own memory, so nothing needs SharedArrayBuffer or
 // COOP/COEP headers.
@@ -161,19 +161,13 @@ const compiling = WebAssembly.compileStreaming(
   fetch(backend === "webgl2" ? webglWasmUrl : wasmUrl),
 );
 
-// The Web Workers load their scripts while the module downloads and
-// compiles, and get it once it has.
+// How many tile workers the page starts once the module has compiled.
 const count = number(
   "workers",
   Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1)),
 );
-const tileWorkers = Array.from({ length: count }, () =>
-  backend === "webgl2"
-    ? new Worker(new URL("./worker-webgl.ts", import.meta.url), {
-        type: "module",
-      })
-    : new Worker(new URL("./worker.ts", import.meta.url), { type: "module" }),
-);
+// The map's Web Worker loads its script while the module downloads and
+// compiles, and gets it once it has.
 const map =
   backend === "webgl2"
     ? new Worker(new URL("./map-worker.ts", import.meta.url), {
@@ -220,13 +214,22 @@ const panicMessage = "panic=<map|tile> asked for this panic";
 // what they ask of the map waits in the map's Web Worker until it starts.
 compiling.then(
   (module) => {
-    // A module built without the `tile-workers` feature serves none, and its
-    // map does its tiles' work itself.
+    // The tile workers start now, on a module that serves them. One built
+    // without the `tile-workers` feature doesn't: the page starts none, and
+    // its map does its tiles' work itself.
     const served = WebAssembly.Module.exports(module).some(
       ({ name }) => name === "mlnWebServeTileWorker",
     );
-    if (!served) for (const worker of tileWorkers) worker.terminate();
-    const ports = (served ? tileWorkers : []).map((worker, i) => {
+    const tileWorkers = Array.from({ length: served ? count : 0 }, () =>
+      backend === "webgl2"
+        ? new Worker(new URL("./worker-webgl.ts", import.meta.url), {
+            type: "module",
+          })
+        : new Worker(new URL("./worker.ts", import.meta.url), {
+            type: "module",
+          }),
+    );
+    const ports = tileWorkers.map((worker, i) => {
       const channel = new MessageChannel();
       const start: StartTileWorker = {
         module,
