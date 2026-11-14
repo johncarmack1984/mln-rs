@@ -66,11 +66,12 @@ dependency on `mln-rs = "0.1"` takes it.
 
 ## When a release fails
 
-If the workflow fails part way, run it again on the same commit (Re-run jobs on
-the failed run): packages that crates.io already has at this version are
-skipped, and so is an existing GitHub release. `mise run release`, or Actions →
-release → Run workflow, runs it on main's latest commit, and so does the next
-push to main. If the fix changes a package, release a new version instead.
+If the workflow fails part way, the next push to main runs it again, and so do
+Re-run jobs on the failed run, `mise run release` and Actions → release → Run
+workflow. Each run releases the commit that set the version, normally the
+release pull request's merge, whatever commit it runs on. Packages that
+crates.io already has at this version are skipped, and so is an existing GitHub
+release. If the fix changes a package, release a new version instead.
 
 crates.io limits how many new crates an account can publish in a short time. The
 first release after adding libraries runs into it: the workflow waits and
@@ -86,7 +87,8 @@ hand. In a fork, it does nothing.
    which `release` creates last. It checks out only `Cargo.toml` and builds
    nothing.
 2. If it doesn't, or the workflow was run by hand, `release`:
-   1. Checks out this repository. It needs no C++ checkout.
+   1. Checks out the commit that set the version: the latest on the branch whose
+      change to `Cargo.toml` adds the version's line. It needs no C++ checkout.
    2. Installs stable Rust and runs `cargo package --workspace --locked`
       (without the desktop app). It packages every crate and builds each one
       from its packaged sources. The packages resolve each other locally, so
@@ -94,8 +96,8 @@ hand. In a fork, it does nothing.
    3. Publishes the packages crates.io does not have at this version
       (`cargo publish --workspace --exclude …`), in dependency order. When
       crates.io answers 429, it waits 10 minutes and continues.
-   4. Creates the tag `v<version>` on the workflow's commit and a GitHub release
-      with the `.crate` files and the version's part of `CHANGELOG.md`.
+   4. Creates the tag `v<version>` on that commit and a GitHub release with the
+      `.crate` files and the version's part of `CHANGELOG.md`.
 3. After a push, `release-pr` runs `release-plz release-pr`, which opens or
    updates the release pull request.
 
