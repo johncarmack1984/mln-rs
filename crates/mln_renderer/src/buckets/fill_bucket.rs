@@ -24,7 +24,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::bucket::{Bucket, BucketBase};
 use crate::bucket_geometry::GeometryVec;
-use crate::buckets::line_bucket::LineLayoutVertex;
 use crate::gfx::fill_generator::generate_fill_and_outline_buffers;
 use crate::layout::pattern_layout::PatternLayerMap;
 use crate::paint_property_binder::{CrossFadedPaintPropertyBinder, PaintPropertyBinder};
@@ -48,14 +47,6 @@ pub(crate) struct FillLayoutVertex {
 #[derive(Serialize, Deserialize)]
 pub(crate) struct FillBucket {
     pub(crate) base: BucketBase,
-
-    /// Whether the outlines are built as triangles too, into the `line_*`
-    /// buffers, and not only as `basic_lines`
-    /// ([`FillBucket::triangulates_outlines`]).
-    pub(crate) triangulate_outlines: bool,
-    pub(crate) line_vertices: GeometryVec<LineLayoutVertex>,
-    pub(crate) line_indexes: GeometryVec<u16>,
-    pub(crate) line_segments: Vec<SegmentBase>,
 
     pub(crate) basic_lines: GeometryVec<u16>,
     pub(crate) basic_line_segments: Vec<SegmentBase>,
@@ -93,10 +84,6 @@ impl FillBucket {
         }
         FillBucket {
             base: BucketBase::default(),
-            triangulate_outlines: false,
-            line_vertices: GeometryVec::default(),
-            line_indexes: GeometryVec::default(),
-            line_segments: Vec::new(),
             basic_lines: GeometryVec::default(),
             basic_line_segments: Vec::new(),
             vertices: GeometryVec::default(),
@@ -113,15 +100,6 @@ impl FillBucket {
         self.subdivision_granularity = *value;
     }
 
-    /// Whether the fill buckets of a renderer on `backend` build their
-    /// outlines as triangles too, for the line shader. C++ does on Metal and
-    /// WebGPU, which can't draw wide lines (`MLN_TRIANGULATE_FILL_OUTLINES`);
-    /// OpenGL and Vulkan draw only the basic lines.
-    #[must_use]
-    pub(crate) fn triangulates_outlines(backend: mln_gfx::backend::Type) -> bool {
-        matches!(backend, mln_gfx::backend::Type::Metal | mln_gfx::backend::Type::WebGPU)
-    }
-
     #[must_use]
     pub(crate) fn layout_vertex(p: GeometryCoordinate) -> FillLayoutVertex {
         FillLayoutVertex { a1: [p.x, p.y] }
@@ -133,14 +111,10 @@ impl FillBucket {
             self.vertices.get_mut(),
             self.triangles.get_mut(),
             &mut self.triangle_segments,
-            self.line_vertices.get_mut(),
-            self.line_indexes.get_mut(),
-            &mut self.line_segments,
             self.basic_lines.get_mut(),
             &mut self.basic_line_segments,
             canonical,
             self.subdivision_granularity.fill.get_granularity_for_zoom_level(canonical.z),
-            self.triangulate_outlines,
         )
     }
 

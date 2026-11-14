@@ -2,8 +2,9 @@
 // `cargo test` runs the tests), with the manifest for the OS and backend, and
 // the HTML report and the actual/diff images in target/tmp/<name>. macOS adds
 // the C++ WebGPU ignore list, since wgpu renders through Metal there. OpenGL
-// and Vulkan take C++'s expectations and ignores for those backends, which
-// draw fill outlines as lines where Metal and WebGPU draw triangles.
+// and Vulkan take C++'s expectations and ignores for those backends. Metal and
+// WebGPU draw lines 1 px wide, and ignore the tests whose fill outlines need 2
+// (ignores/rust-port-1px-outlines.json).
 //
 // The tests run in worker processes of the package's render-test binary
 // (`--jobs`, src/jobs.rs): one per CPU, or $RENDER_TEST_JOBS (1: in the

@@ -18,18 +18,19 @@ const THRESHOLD = 0.001;
 const VIEWS = [
   { id: "real-world/nepal" },
   { id: "real-world/norway" },
-  { id: "real-world/uruguay" },
+  // SwiftShader's WebGL2 and lavapipe draw the 1 px fill outlines on
+  // different pixels: 0.15% of the pixels with WebGL2.
+  { id: "real-world/uruguay", allowed: 0.003 },
   { id: "real-world/chicago" },
   { id: "real-world/sanfrancisco" },
   { id: "raster-rotation/45" },
   { id: "raster-masking/overlapping-vector" },
   { id: "hillshade-accent-color/default" },
   // SwiftShader and lavapipe antialias the edges of the z1 coastlines
-  // differently: 0.5% of the pixels. With WebGL2, whose fill outlines are
-  // lines where the native WebGPU render's are triangles, 1.0%.
+  // differently: 0.5% of the pixels.
   {
     id: "combinations/color-relief--hillshade--vector-fill--color-relief--hillshade",
-    allowed: 0.015,
+    allowed: 0.01,
   },
   { id: "text-font/devanagari" },
   { id: "text-font/khmer" },
