@@ -17,6 +17,12 @@ on:
 permissions:
   contents: read
 
+# One run at a time, so that a push's `version` check waits for a release
+# that is running, and then finds its GitHub release.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   # A few seconds, so that a push that releases nothing costs no more. Forks
   # release nothing.
@@ -61,9 +67,6 @@ jobs:
     timeout-minutes: 360
     permissions:
       contents: write # the tag and the GitHub release
-    concurrency:
-      group: release
-      cancel-in-progress: false
     steps:
       - name: Require the default branch
         if:
