@@ -3,13 +3,11 @@ name: release
 # Releases the workspace in Cargo.toml: mln-rs and its internal mln-rs-*
 # crates, all at the workspace's version (RELEASING.md). On every push to
 # main, `version` checks whether that version has its GitHub release, which
-# a release creates last. Once the release pull request merges, it doesn't:
-# `release` publishes the packages, tags the commit v<version> and creates
-# the GitHub release. Then `release-pr` has release-plz open or update the
-# pull request for the next release (release-plz.toml). A release that
-# failed part way runs again on the next push, or by hand, from the commit
-# that set the version: packages crates.io already has at this version are
-# skipped.
+# a release creates last. Once a release pull request (release-pr.yml)
+# merges, it doesn't: `release` publishes the packages, tags the commit
+# v<version> and creates the GitHub release. A release that failed part way
+# runs again on the next push, or by hand, from the commit that set the
+# version: packages crates.io already has at this version are skipped.
 
 on:
   push:
@@ -171,41 +169,3 @@ jobs:
             --title "$tag" \
             --notes-file "$notes" \
             "${files[@]}"
-
-  # After `release`, so that release-plz compares the packages with what
-  # crates.io has, including a release this push just published. Not after a
-  # release that failed or timed out.
-  release-pr:
-    needs: [version, release]
-    if: >-
-      !cancelled() && github.event_name == 'push' && needs.version.result ==
-      'success' && (needs.release.result == 'success' || needs.release.result ==
-      'skipped')
-    runs-on: ubuntu-26.04
-    timeout-minutes: 90
-    permissions:
-      contents: write # the pull request's branch
-      pull-requests: write
-    concurrency:
-      group: release-pr
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          # The commits since the last release.
-          fetch-depth: 0
-          persist-credentials: false
-
-      # For cargo-semver-checks, which the action installs.
-      - name: Install Rust
-        run: |
-          rustup toolchain install --profile minimal --no-self-update
-
-      # A pull request opened with the default token starts no workflows, so
-      # CI doesn't run on it; one opened with RELEASE_PLZ_TOKEN does
-      # (RELEASING.md).
-      - uses: release-plz/action@v0.5
-        with:
-          command: release-pr
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN || github.token }}

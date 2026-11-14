@@ -22,10 +22,10 @@ released.
 
 ## Releasing a version
 
-On every push to main, the release workflow has
-[release-plz](https://release-plz.dev) (`release-plz.toml`) open a pull request
-for the next release, "Release v<version>", or update the one it opened. It
-changes:
+Every night, and when run by hand (Actions → release-pr → Run workflow), the
+release-pr workflow has [release-plz](https://release-plz.dev)
+(`release-plz.toml`) open a pull request for the next release, "Release
+v<version>", or update the one it opened. It changes:
 
 - the version in `Cargo.toml`: `[workspace.package] version` and the
   `=<version>` of every in-repo entry in `[workspace.dependencies]`, and
@@ -46,15 +46,15 @@ other targets build: all of mln-rs-mtl (Apple platforms) and mln-rs-web-host
 catch every break either. For a break it misses, set the version by hand
 (below).
 
-To release, merge the pull request. The workflow then publishes the packages,
-tags the commit `v<version>` and creates a GitHub release with the version's
-part of `CHANGELOG.md`. crates.io never replaces a published version.
+To release, merge the pull request. The release workflow then publishes the
+packages, tags the commit `v<version>` and creates a GitHub release with the
+version's part of `CHANGELOG.md`. crates.io never replaces a published version.
 
 Before merging, you can edit the changelog, or set another version on the pull
 request's branch with `release-plz set-version <version>`, which also updates
 the `=<version>` entries, `Cargo.lock` and the changelog. Then merge it before
-anything else: on the next push to main, release-plz replaces a release pull
-request that has commits besides its own with a new one.
+release-plz runs again, at night or by hand: it replaces a release pull request
+that has commits besides its own with a new one.
 
 ### Releasing 0.1.0
 
@@ -66,9 +66,9 @@ dependency on `mln-rs = "0.1"` takes it.
 
 ## When a release fails
 
-If the workflow fails part way, the next push to main runs it again, and so do
-Re-run jobs on the failed run, `mise run release` and Actions → release → Run
-workflow. Each run releases the commit that set the version, normally the
+If the release workflow fails part way, the next push to main runs it again, and
+so do Re-run jobs on the failed run, `mise run release` and Actions → release →
+Run workflow. Each run releases the commit that set the version, normally the
 release pull request's merge, whatever commit it runs on. Packages that
 crates.io already has at this version are skipped, and so is an existing GitHub
 release. If the fix changes a package, release a new version instead.
@@ -78,7 +78,7 @@ first release after adding libraries runs into it: the workflow waits and
 retries until every package is published, up to its 6-hour timeout. Running it
 again continues. To avoid the wait, ask help@crates.io to raise the limit first.
 
-## What the workflow does
+## What the workflows do
 
 `.github/workflows/release.yml` runs on every push to main, and when run by
 hand. In a fork, it does nothing.
@@ -98,8 +98,12 @@ hand. In a fork, it does nothing.
       crates.io answers 429, it waits 10 minutes and continues.
    4. Creates the tag `v<version>` on that commit and a GitHub release with the
       `.crate` files and the version's part of `CHANGELOG.md`.
-3. After a push, `release-pr` runs `release-plz release-pr`, which opens or
-   updates the release pull request.
+
+`.github/workflows/release-pr.yml` runs `release-plz release-pr` on the default
+branch's latest commit, which opens or updates the release pull request. It runs
+at 02:13 UTC and when run by hand, not on every push, since release-plz runs
+cargo-semver-checks on every library that changed since the last release. In a
+fork, it does nothing.
 
 CI (`release-crate` in `ci.yml`, `mise run ci:package`) runs step 2.2 on every
 push and PR. It catches a manifest crates.io would reject.
@@ -162,7 +166,7 @@ goes into `[workspace.dependencies]` only.
   requests, opens it instead, as the token's account, and CI runs.
   (maplibre/martin uses a GitHub App, whose token a step creates on each run.)
 - **Workflow permissions**: `release` asks for `contents: write` to push the tag
-  and create the release, and `release-pr` for `contents: write` and
+  and create the release, and release-pr.yml for `contents: write` and
   `pull-requests: write` to push the pull request's branch and open it. That
   works with the default repository setting (Settings → Actions → General). An
   organization or enterprise policy that caps `GITHUB_TOKEN` at read-only would

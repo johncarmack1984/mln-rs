@@ -1,8 +1,8 @@
-# release-plz (https://release-plz.dev) prepares each release: on every push to
-# main, the release workflow (.github/workflows/release.yml) runs `release-plz
-# release-pr`, which opens a pull request with the next version and its
-# changelog, or updates the one it opened. Merging it releases that version
-# (RELEASING.md).
+# release-plz (https://release-plz.dev) prepares each release: every night,
+# .github/workflows/release-pr.yml runs `release-plz release-pr`, which opens
+# a pull request with the next version and its changelog, or updates the one
+# it opened. Merging it releases that version (.github/workflows/release.yml,
+# RELEASING.md).
 
 [workspace]
 # The next version. cargo-semver-checks compares each library with its release
