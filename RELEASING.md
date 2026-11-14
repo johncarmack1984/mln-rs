@@ -24,8 +24,8 @@ released.
 
 Every night, and when run by hand (Actions → release-pr → Run workflow), the
 release-pr workflow has [release-plz](https://release-plz.dev)
-(`release-plz.toml`) open a pull request for the next release, "Release
-v<version>", or update the one it opened. It changes:
+(`release-plz.toml`) open a pull request for the next release,
+`Release v<version>`, or update the one it opened. It changes:
 
 - the version in `Cargo.toml`: `[workspace.package] version` and the
   `=<version>` of every in-repo entry in `[workspace.dependencies]`, and

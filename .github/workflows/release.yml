@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-          sparse-checkout: Cargo.toml
+          sparse-checkout: /Cargo.toml
           sparse-checkout-cone-mode: false
 
       - name: Look for the version's GitHub release
