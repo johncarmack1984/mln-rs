@@ -2,13 +2,13 @@ name: release
 
 # Releases the workspace in Cargo.toml: mln-rs and its internal mln-rs-*
 # crates, all at the workspace's version (RELEASING.md). On every push to
-# main, `version` checks whether crates.io has mln-rs at that version. Once
-# the release pull request merges, it doesn't: `release` publishes the
-# packages, tags the commit v<version> and creates a GitHub release. Then
-# `release-pr` has release-plz open or update the pull request for the next
-# release (release-plz.toml). Running the workflow by hand runs `release`
-# again, which finishes a release that failed part way: packages crates.io
-# already has at this version are skipped.
+# main, `version` checks whether that version has its GitHub release, which
+# a release creates last. Once the release pull request merges, it doesn't:
+# `release` publishes the packages, tags the commit v<version> and creates
+# the GitHub release. Then `release-pr` has release-plz open or update the
+# pull request for the next release (release-plz.toml). A release that
+# failed part way runs again on the next push, or by hand: packages
+# crates.io already has at this version are skipped.
 
 on:
   push:
@@ -18,9 +18,6 @@ on:
 permissions:
   contents: read
 
-env:
-  USER_AGENT: mln-rs-release (${{ github.server_url }}/${{ github.repository }})
-
 jobs:
   # A few seconds, so that a push that releases nothing costs no more. Forks
   # release nothing.
@@ -29,7 +26,7 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     outputs:
-      published: ${{ steps.version.outputs.published }}
+      released: ${{ steps.version.outputs.released }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -37,27 +34,28 @@ jobs:
           sparse-checkout: Cargo.toml
           sparse-checkout-cone-mode: false
 
-      - name: Check crates.io for the version
+      - name: Look for the version's GitHub release
         id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           version=$(python3 -I -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')
-          status=$(curl -s --retry 3 -o /dev/null -w '%{http_code}' -A "$USER_AGENT" "https://crates.io/api/v1/crates/mln-rs/$version")
-          case $status in
-            200) published=true ;;
-            404) published=false ;;
-            *)
-              echo "::error::crates.io answered $status for mln-rs $version."
-              exit 1
-              ;;
-          esac
-          echo "mln-rs $version on crates.io: $published"
-          echo "published=$published" >> "$GITHUB_OUTPUT"
+          if out=$(gh release view "v$version" --repo "$GITHUB_REPOSITORY" --json tagName 2>&1); then
+            released=true
+          elif [[ $out == "release not found" ]]; then
+            released=false
+          else
+            echo "::error::$out"
+            exit 1
+          fi
+          echo "v$version released: $released"
+          echo "released=$released" >> "$GITHUB_OUTPUT"
 
   release:
     needs: version
     if:
-      github.event_name == 'workflow_dispatch' ||
-      needs.version.outputs.published == 'false'
+      github.event_name == 'workflow_dispatch' || needs.version.outputs.released
+      == 'false'
     runs-on: ubuntu-26.04
     # The publish step waits out crates.io's limit on new crates, which the
     # first release of new packages runs into.
@@ -104,6 +102,7 @@ jobs:
       - name: Publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          USER_AGENT: mln-rs-release (https://github.com/louwers/mln-rs)
         run: |
           set -o pipefail
           while true; do

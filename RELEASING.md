@@ -77,9 +77,10 @@ again continues. To avoid the wait, ask help@crates.io to raise the limit first.
 `.github/workflows/release.yml` runs on every push to main, and when run by
 hand. In a fork, it does nothing.
 
-1. `version` checks whether crates.io has mln-rs at the version in `Cargo.toml`.
-   It checks out only `Cargo.toml` and builds nothing.
-2. If crates.io doesn't, or the workflow was run by hand, `release`:
+1. `version` checks whether the version in `Cargo.toml` has its GitHub release,
+   which `release` creates last. It checks out only `Cargo.toml` and builds
+   nothing.
+2. If it doesn't, or the workflow was run by hand, `release`:
    1. Checks out this repository. It needs no C++ checkout.
    2. Installs stable Rust and runs `cargo package --workspace --locked`
       (without the desktop app). It packages every crate and builds each one
