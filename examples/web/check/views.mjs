@@ -18,9 +18,7 @@ const THRESHOLD = 0.001;
 const VIEWS = [
   { id: "real-world/nepal" },
   { id: "real-world/norway" },
-  // SwiftShader's WebGL2 and lavapipe draw the 1 px fill outlines on
-  // different pixels: 0.15% of the pixels with WebGL2.
-  { id: "real-world/uruguay", allowed: 0.003 },
+  { id: "real-world/uruguay" },
   { id: "real-world/chicago" },
   { id: "real-world/sanfrancisco" },
   { id: "raster-rotation/45" },
