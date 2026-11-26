@@ -1,8 +1,12 @@
 //! Planar coordinate reference systems that a map can draw in: an app
 //! registers each with its registry, and a style's `projection.type` names
-//! one.
+//! one. A [`CrsMapping`] maps lng/lat to and from the world square of one.
+
+mod mapping;
 
 use std::fmt;
+
+pub use mapping::{CrsMapping, WorldBox};
 
 use crate::projection::IDENTITY_PROJECTION_NAME;
 

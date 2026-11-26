@@ -1,6 +1,8 @@
 // The parts of test/gl/bucket.test.cpp of the engine's stores and raster
 // masks (on the WebGPU headless backend).
 mod bucket_test;
+// Coordinate reference systems for the tests of registered projections.
+pub(crate) mod crs;
 // Cameras that move faster than the network answers.
 mod fast_camera_test;
 mod fixture_log;

@@ -300,8 +300,8 @@ mod tests {
         let mut builder = RegistryBuilder::new();
         builder.add_projection(identity_named("test:crs")).unwrap();
         let registry = builder.build();
-        let crs = registry.style().projection("test:crs").expect("registered");
-        assert_eq!(crs.name, "test:crs");
+        let mapping = registry.style().projection("test:crs").expect("registered");
+        assert_eq!(mapping.crs().name, "test:crs");
         assert!(registry.style().projection("test:other").is_none());
     }
 
@@ -361,7 +361,7 @@ mod tests {
         register_builtin_projections(&mut builder).unwrap();
         assert_eq!(register_builtin_projections(&mut builder), Err(RegisterError::Duplicate("identity".to_owned())));
         let registry = builder.build();
-        let identity = registry.style().projection("identity").expect("identity");
+        let identity = registry.style().projection("identity").expect("identity").crs();
         assert_eq!(identity.tile_matrix_set, TileMatrixSet { origin: [-90.0, 90.0], extent_at_zoom0: 180.0 });
         let mut positions = [[0.0; 2]; 2];
         identity.converter.forward(&[[12.5, -41.9], [-180.0, 90.0]], &mut positions);

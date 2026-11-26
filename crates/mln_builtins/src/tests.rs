@@ -75,7 +75,7 @@ fn builtins_register_the_identity_projection() {
     let mut builder = RegistryBuilder::new();
     register_builtins(&mut builder).unwrap();
     for registry in [builder.build(), registry()] {
-        let identity = registry.style().projection("identity").expect("identity");
+        let identity = registry.style().projection("identity").expect("identity").crs();
         assert_eq!(identity.tile_matrix_set, Crs::identity().tile_matrix_set);
     }
 }

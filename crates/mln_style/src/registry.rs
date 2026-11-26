@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use crate::collections::VecMap;
 use crate::conversion::{Convertible, Error};
-use crate::crs::Crs;
+use crate::crs::{Crs, CrsMapping};
 use crate::expression::Functions;
 use crate::feature::Value;
 use crate::layer::{ErasedStyleLayerType, Layer, SourceKind};
@@ -24,7 +24,7 @@ pub struct StyleRegistry {
     source_types: VecMap<&'static str, &'static dyn ErasedStyleSourceType>,
     root_members: VecMap<&'static str, &'static dyn ErasedMember>,
     layer_members: VecMap<&'static str, &'static dyn ErasedMember>,
-    projections: VecMap<String, Arc<Crs>>,
+    projections: VecMap<String, Arc<CrsMapping>>,
 }
 
 /// A member's JSON value, and its parsed value where the registry has the
@@ -33,8 +33,10 @@ pub(crate) type MemberValue = (Value, Option<Arc<dyn std::any::Any + Send + Sync
 
 impl StyleRegistry {
     /// The registry of `functions`, `layer_types`, `source_types`, `members`
-    /// and `projections`. A type or a projection is known by its name, and a
-    /// member by its place and name: of two of one name, the first counts.
+    /// and `projections`, each projection with the one mapping that every
+    /// map drawn in it shares. A type or a projection is known by its name,
+    /// and a member by its place and name: of two of one name, the first
+    /// counts.
     #[must_use]
     pub fn new(
         functions: Arc<Functions>,
@@ -61,7 +63,7 @@ impl StyleRegistry {
         }
         let mut projections_by_name = VecMap::new();
         for crs in projections {
-            projections_by_name.entry(crs.name.clone()).or_insert(crs);
+            projections_by_name.entry(crs.name.clone()).or_insert_with(|| Arc::new(CrsMapping::new(crs)));
         }
         StyleRegistry {
             functions,
@@ -134,10 +136,10 @@ impl StyleRegistry {
         self.source_types.values().copied()
     }
 
-    /// The registered projection `name`, which a style's `projection.type`
-    /// can name.
+    /// The mapping of the registered projection `name`, which a style's
+    /// `projection.type` can name.
     #[must_use]
-    pub fn projection(&self, name: &str) -> Option<&Arc<Crs>> {
+    pub fn projection(&self, name: &str) -> Option<&Arc<CrsMapping>> {
         self.projections.get(name)
     }
 
