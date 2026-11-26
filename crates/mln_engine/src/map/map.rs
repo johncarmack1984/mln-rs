@@ -26,6 +26,7 @@ use crate::camera::{
 };
 use crate::exec::event_queue::{EventQueue, Waker};
 use crate::exec::pool::Pool;
+use crate::geo::world::WorldMapping;
 use crate::geo::{EdgeInsets, ScreenCoordinate};
 use crate::map::events::{MapEvent, RenderFrameStatus};
 use crate::map::feature_state::FeatureStateStore;
@@ -752,14 +753,34 @@ impl Map {
     }
 
     /// Gives the transform the style's current projection, which constrains
-    /// the target of an animation it starts. The style reports each change
-    /// to its projection, and the map calls this then.
+    /// the target of an animation it starts, and the world it draws in. The
+    /// style reports each change to its projection, and the map calls this
+    /// then.
     fn share_projection_with_transform(&mut self) {
         let projection = (self.mode != MapMode::Tile).then(|| Arc::clone(self.style.get_projection()));
         self.transform.set_projection_for_zoom(Some(Rc::new(move |zoom: f64| match &projection {
             Some(projection) => projection.evaluate(zoom as f32),
             None => ProjectionDefinition::new(ProjectionType::Mercator),
         })));
+        let world = self.world();
+        self.transform.set_world(world);
+    }
+
+    /// The world that the style's projection draws in, in every map mode:
+    /// the registered projection it names, found in the style's registry, or
+    /// Mercator. A name the registry lacks draws Mercator, with a warning.
+    fn world(&self) -> WorldMapping {
+        let Some(name) = self.style.get_projection().registered_name() else {
+            return WorldMapping::Mercator;
+        };
+        let Some(mapping) = self.style.registry().projection(name) else {
+            log::warn!(
+                target: log_target::GENERAL,
+                "The style's projection \"{name}\" isn't registered: the map draws in Mercator"
+            );
+            return WorldMapping::Mercator;
+        };
+        WorldMapping::Crs(Arc::clone(mapping))
     }
 
     // MARK: - Still images

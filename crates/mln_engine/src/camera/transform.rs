@@ -27,7 +27,7 @@ use crate::camera::{
     NorthOrientation, ProjectionMode, TransformState, TransitionEnd, VerticalPerspectiveProjection, View, ViewportMode,
 };
 use crate::geo::constants::M2PI;
-use crate::geo::projection::Projection;
+use crate::geo::world::WorldMapping;
 use crate::geo::{EdgeInsets, ScreenCoordinate};
 use crate::log_target;
 
@@ -88,13 +88,11 @@ fn frame_edge_insets(top: f64, left: f64, bottom: f64, right: f64) -> Option<Edg
     Some(EdgeInsets::new(top, left, bottom, right))
 }
 
-/// An animation frame's `Projection::unproject`, or `None` (logged) for a
-/// point with no `LatLng`, such as NaN: the frame keeps the center and zoom,
-/// as [`frame_edge_insets`] does.
-fn frame_unproject(p: &Point<f64>, scale: f64, wrap_mode: WrapMode) -> Option<LatLng> {
-    Projection::unproject(p, scale, wrap_mode)
-        .map_err(|e| log::error!(target: log_target::GENERAL, "{}", e.message))
-        .ok()
+/// An animation frame's [`WorldMapping::unproject`], or `None` (logged) for
+/// a point with no `LatLng`, such as NaN: the frame keeps the center and
+/// zoom, as [`frame_edge_insets`] does.
+fn frame_unproject(world: &WorldMapping, p: &Point<f64>, scale: f64, wrap_mode: WrapMode) -> Option<LatLng> {
+    world.unproject(p, scale, wrap_mode).map_err(|e| log::error!(target: log_target::GENERAL, "{}", e.message)).ok()
 }
 
 /// Identifies a camera command that the transform started, in the
@@ -608,6 +606,12 @@ impl Transform {
         self.state.set_projection_definition(definition);
     }
 
+    /// Sets how lng/lat maps to the world square (see
+    /// [`TransformState::set_world`]).
+    pub(crate) fn set_world(&mut self, world: WorldMapping) {
+        self.state.set_world(world);
+    }
+
     /// The projection the style gives at a zoom, which constrains an
     /// animation's target as it constrains a jump.
     pub(crate) fn set_projection_for_zoom(&mut self, projection_for_zoom: Option<ProjectionForZoomFn>) {
@@ -819,3 +823,7 @@ fn max_pitch_for_padding(state: &TransformState, insets: &EdgeInsets) -> f64 {
 #[cfg(test)]
 #[path = "transform_test.rs"]
 mod transform_test;
+
+#[cfg(test)]
+#[path = "transform_crs_test.rs"]
+mod transform_crs_test;

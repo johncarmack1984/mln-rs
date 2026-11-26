@@ -378,7 +378,7 @@ impl RenderOrchestrator {
         // The sources' tiles are in other world copies once the center has
         // crossed the antimeridian (`SourceTiles::handle_wrap_jump`), and
         // the layers' draws go with them.
-        let longitude = update_parameters.view.center(mln_style::geo::WrapMode::Unwrapped).longitude() as f32;
+        let longitude = update_parameters.view.world_copy_longitude() as f32;
         let wrap_delta = ((longitude - self.longitude) / 360.0).round() as i16;
         self.longitude = longitude;
         if wrap_delta != 0 {

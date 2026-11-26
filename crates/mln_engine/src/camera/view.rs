@@ -24,6 +24,7 @@ use crate::camera::vertical_perspective_projection::VerticalPerspectiveProjectio
 pub use crate::geo::NorthOrientation;
 use crate::geo::constants::M2PI;
 use crate::geo::projection::Projection;
+use crate::geo::world::WorldMapping;
 use crate::geo::{EdgeInsets, ScreenCoordinate};
 use crate::tile::UnwrappedTileID;
 
@@ -77,7 +78,7 @@ fn modf_fraction(x: f64) -> f64 {
 }
 
 /// What a view shows, in the units its math works in.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ViewParams {
     pub(crate) size: Size,
     pub(crate) frustum_offset: EdgeInsets,
@@ -94,6 +95,9 @@ pub(crate) struct ViewParams {
     pub(crate) globe_free_bearing: bool,
     /// The style's projection, as it was last set.
     pub(crate) projection_definition: ProjectionDefinition,
+    /// How lng/lat maps to the world square: Mercator, or a registered
+    /// projection's.
+    pub(crate) world: WorldMapping,
     /// 0 is Mercator, 1 is the globe, in between is the transition.
     pub(crate) projection_transition: f64,
     pub(crate) padding: EdgeInsets,
@@ -132,6 +136,7 @@ impl ViewParams {
             center_clamped_to_ground: true,
             globe_free_bearing: false,
             projection_definition: ProjectionDefinition::default(),
+            world: WorldMapping::Mercator,
             projection_transition: 0.0,
             padding: EdgeInsets::default(),
             x: 0.0,
@@ -309,9 +314,15 @@ impl View {
     // MARK: - Camera
 
     /// The center. `WrapMode::Unwrapped` keeps the copy of the world that
-    /// the camera is in.
+    /// the camera is in; a registered projection's world has no copies.
     #[must_use]
     pub fn center(&self, wrap_mode: WrapMode) -> LatLng {
+        if let WorldMapping::Crs(_) = self.params.world {
+            let center = self.center_world();
+            let mut lng_lat = [[0.0; 2]];
+            self.params.world.lng_lats_from_world(&[[center.x, center.y]], &mut lng_lat);
+            return LatLng::saturating(lng_lat[0][1], lng_lat[0][0], WrapMode::Unwrapped);
+        }
         let world_size = Projection::world_size(self.params.scale);
         LatLng::saturating(
             mln_style::math::rad2deg(2.0 * (self.params.y / (world_size / M2PI)).exp().atan() - 0.5 * PI),
@@ -321,9 +332,12 @@ impl View {
     }
 
     /// The world copy of `location` nearest the center, which bounds can keep
-    /// past the antimeridian.
+    /// past the antimeridian; `location` itself in a world that doesn't wrap.
     #[must_use]
     pub fn lat_lng_near_center(&self, location: &LatLng) -> LatLng {
+        if !self.params.world.wraps() {
+            return *location;
+        }
         let center = self.center(WrapMode::Unwrapped);
         let wrapped_center = center.wrapped();
         let mut nearest = location.wrapped();
@@ -345,7 +359,15 @@ impl View {
     /// `pixelsPerMeter`, inverted): the scale of every height the matrices
     /// place, so that a point at the center's altitude draws at the center.
     pub(crate) fn meters_per_pixel(&self) -> f64 {
-        Projection::meters_per_pixel_at_latitude(self.center(WrapMode::Unwrapped).latitude(), self.zoom())
+        match &self.params.world {
+            WorldMapping::Mercator => {
+                Projection::meters_per_pixel_at_latitude(self.center(WrapMode::Unwrapped).latitude(), self.zoom())
+            }
+            WorldMapping::Crs(_) => {
+                self.params.world.meters_per_world_unit(&self.center_world())
+                    / Projection::world_size(self.params.scale)
+            }
+        }
     }
 
     /// The center's altitude in pixels at the zoom.
@@ -393,6 +415,27 @@ impl View {
     #[must_use]
     pub(crate) fn y(&self) -> f64 {
         self.params.y
+    }
+
+    /// How lng/lat maps to the world square: Mercator, or the registered
+    /// projection the map draws in.
+    #[must_use]
+    pub fn world(&self) -> &WorldMapping {
+        &self.params.world
+    }
+
+    /// The center's place in the world square.
+    pub(crate) fn center_world(&self) -> Point<f64> {
+        let world_size = Projection::world_size(self.params.scale);
+        Point::new(0.5 - self.params.x / world_size, 0.5 - self.params.y / world_size)
+    }
+
+    /// The center's longitude, unwrapped, which tiles follow into another
+    /// world copy as the center crosses the antimeridian; 0 in a world that
+    /// doesn't wrap, which has no copies.
+    #[must_use]
+    pub fn world_copy_longitude(&self) -> f64 {
+        if self.params.world.wraps() { self.center(WrapMode::Unwrapped).longitude() } else { 0.0 }
     }
 
     /// The map's rotation, counterclockwise: the negated bearing.
@@ -599,7 +642,7 @@ impl View {
         if !self.is_globe() {
             return self.clone();
         }
-        View::new(ViewParams { projection_transition: 0.0, ..self.params })
+        View::new(ViewParams { projection_transition: 0.0, ..self.params.clone() })
     }
 
     /// The tile-to-world matrix of a tile at the view's scale.
@@ -935,7 +978,7 @@ impl View {
             return VerticalPerspectiveProjection::lat_lng_to_screen_coordinate(self, lat_lng, height);
         }
 
-        let pt = Projection::project(lat_lng, self.params.scale);
+        let pt = self.params.world.project(lat_lng, self.params.scale);
         let p = self.matrices.coord * DVec4::new(pt.x / TILE_SIZE_D, pt.y / TILE_SIZE_D, height, 1.0);
         (ScreenCoordinate::new(p.x / p.w, f64::from(self.params.size.height) - p.y / p.w), p)
     }
@@ -1046,7 +1089,7 @@ impl View {
         } else {
             self.mercator_screen_coordinate_to_tile_coordinate(point, 0, height)
         };
-        Projection::unproject(&coord.p, 1.0 / TILE_SIZE_D, wrap_mode)
+        self.params.world.unproject(&coord.p, 1.0 / TILE_SIZE_D, wrap_mode)
     }
 
     /// The line of sight through `point`, measured from the bottom edge (y
@@ -1089,7 +1132,8 @@ impl View {
             0.0,
         );
         // A point on the screen has a LatLng unless the view holds NaN.
-        let Ok(lat_lng) = Projection::unproject(&corner.p, 1.0 / TILE_SIZE_D, WrapMode::Unwrapped) else {
+        let world = &self.params.world;
+        let Ok(lat_lng) = world.unproject(&corner.p, 1.0 / TILE_SIZE_D, WrapMode::Unwrapped) else {
             return 0.0;
         };
 
@@ -1097,7 +1141,7 @@ impl View {
         let pt = if self.is_globe() {
             Point::new(corner.p.x * scale, corner.p.y * scale)
         } else {
-            let pt = Projection::project(&lat_lng, scale);
+            let pt = world.project(&lat_lng, scale);
             Point::new(pt.x / TILE_SIZE_D, pt.y / TILE_SIZE_D)
         };
         let top_point = self.matrices.coord * DVec4::new(pt.x, pt.y, 0.0, 1.0);

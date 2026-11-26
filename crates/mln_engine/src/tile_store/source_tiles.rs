@@ -639,7 +639,7 @@ impl SourceTiles {
             return;
         }
 
-        self.handle_wrap_jump(parameters.view.center(WrapMode::Unwrapped).longitude() as f32, ctx);
+        self.handle_wrap_jump(parameters.view.world_copy_longitude() as f32, ctx);
 
         let zoom = mln_style::math::clamp_f64(
             parameters.view.zoom() + parameters.tile_lod_zoom_shift,

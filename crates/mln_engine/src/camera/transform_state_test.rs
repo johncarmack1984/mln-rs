@@ -208,7 +208,7 @@ fn numbers_out_of_range_do_not_panic() {
                 if globe {
                     state.set_projection_definition(&ProjectionDefinition::new(ProjectionType::Globe));
                 }
-                let read = std::panic::catch_unwind(move || {
+                let read = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
                     set(&mut state, value);
                     let view = state.view();
                     let center = view.center(WrapMode::Unwrapped);
@@ -220,7 +220,7 @@ fn numbers_out_of_range_do_not_panic() {
                     let _ = view.lat_lng_to_screen_coordinate(&center);
                     let _ =
                         view.screen_coordinate_to_lat_lng(&ScreenCoordinate::new(256.0, 256.0), WrapMode::Unwrapped);
-                });
+                }));
                 assert!(read.is_ok(), "globe: {globe}, {name}: {value:e}");
             }
         }

@@ -13,6 +13,7 @@ use crate::camera::mode::{ConstrainMode, ViewportMode};
 use crate::camera::projection_mode::{AxonometricMode, ProjectionMode};
 use crate::camera::transform_state::TransformState;
 use crate::camera::view::{ViewParams, map_offset, zoom_scale};
+use crate::geo::world::WorldMapping;
 use crate::geo::{EdgeInsets, NorthOrientation};
 
 /// A camera with every member set: the camera that a map has, where
@@ -149,6 +150,7 @@ impl MapView {
             center_clamped_to_ground: viewport.center_clamped_to_ground,
             globe_free_bearing: viewport.globe_free_bearing,
             projection_definition: projection,
+            world: WorldMapping::Mercator,
             projection_transition,
             padding: camera.padding,
             x,

@@ -67,6 +67,13 @@ impl WorldMapping {
         matches!(self, WorldMapping::Mercator)
     }
 
+    /// `lat_lng` in the world copy that longitudes from -180 to 180 cover,
+    /// where the world wraps; unchanged where it doesn't.
+    #[must_use]
+    pub fn wrap(&self, lat_lng: LatLng) -> LatLng {
+        if self.wraps() { lat_lng.wrapped() } else { lat_lng }
+    }
+
     /// The tile grid whose tile 0/0/0 is the world square: EPSG:3857 meters
     /// on Mercator.
     #[must_use]
