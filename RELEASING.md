@@ -73,10 +73,10 @@ release pull request's merge, whatever commit it runs on. Packages that
 crates.io already has at this version are skipped, and so is an existing GitHub
 release. If the fix changes a package, release a new version instead.
 
-crates.io limits how many new crates an account can publish in a short time. The
-first release after adding libraries runs into it: the workflow waits and
-retries until every package is published, up to its 6-hour timeout. Running it
-again continues. To avoid the wait, ask help@crates.io to raise the limit first.
+crates.io limits how many new crates an account can publish in a short time. A
+release that adds more libraries than that stops with status 429: run it again
+later, and it continues. To avoid the wait, ask help@crates.io to raise the
+limit first.
 
 ## What the workflows do
 
@@ -93,9 +93,11 @@ hand. In a fork, it does nothing.
       (without the desktop app). It packages every crate and builds each one
       from its packaged sources. The packages resolve each other locally, so
       this works before any of them is on crates.io.
-   3. Publishes the packages crates.io does not have at this version
-      (`cargo publish --workspace --exclude …`), in dependency order. When
-      crates.io answers 429, it waits 10 minutes and continues.
+   3. Publishes the packages crates.io does not have at this version, one at a
+      time in dependency order (`cargo publish --package …`). A crate that
+      requires Trusted Publishing gets a token that crates.io trades for the
+      job's GitHub OIDC token, and any other, such as a new crate,
+      `CARGO_REGISTRY_TOKEN`.
    4. Creates the tag `v<version>` on that commit and a GitHub release with the
       `.crate` files and the version's part of `CHANGELOG.md`.
 
@@ -144,18 +146,32 @@ A new library under `crates/` or `vendor/` needs:
 - a dependency of mln-rs (root `[dependencies]`) and a `pub use` in
   `src/lib.rs`.
 
+Its first release publishes it with `CARGO_REGISTRY_TOKEN`. Then a crate owner
+runs `mise run release:setup-trusted-publishing`
+([Secrets and settings](#secrets-and-settings)).
+
 A library that should not be released gets `publish = false` instead of the
 README and the last three steps. A new third-party crate goes into
 `[workspace.dependencies]` only.
 
 ## Secrets and settings
 
-- **`CARGO_REGISTRY_TOKEN`** (repository secret): a crates.io API token of the
-  account that will own the crates. It needs the `publish-new` and
-  `publish-update` scopes, and can be limited to the crates `mln-rs*`. crates.io
-  tokens can expire, so renew it when it does. The account needs a verified
-  email address to publish. After the first release, `cargo owner --add <user>`
-  adds co-owners.
+- **Trusted Publishing** (each crate's Settings on crates.io): a GitHub
+  publisher with the repository `maplibre/mln-rs`, the workflow `release.yml`
+  and the environment `release`, and "Require trusted publishing for all new
+  versions", so that no API token can publish the crate.
+  `mise run release:setup-trusted-publishing` sets both on every crate a release
+  publishes that is on crates.io. It takes a crate owner's API token with the
+  `trusted-publishing` scope. Run it after a release that publishes a new crate.
+  `cargo owner --add <user>` invites another owner.
+- **`CARGO_REGISTRY_TOKEN`** (repository secret): a crates.io API token of a
+  crate owner, for the crates that don't require Trusted Publishing, such as new
+  ones. It needs the `publish-new` and `publish-update` scopes, and can be
+  limited to the crates `mln-rs*`. crates.io tokens can expire, so renew it when
+  it does. The account needs a verified email address to publish.
+- **The `release` environment** (Settings → Environments): its deployment
+  branches limited to the default branch. Trusted Publishing trusts any job that
+  runs in the environment, including one from a branch that edits the workflow.
 - **Allow GitHub Actions to create and approve pull requests** (Settings →
   Actions → General → Workflow permissions): without it, the workflow's default
   token can't open the release pull request.
