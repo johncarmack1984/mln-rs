@@ -52,12 +52,13 @@ mod vector_tile_test;
 pub(crate) mod types;
 
 /// The registrations that the tests' maps, renderers and styles use: the
-/// specification's expression functions and the tests' layer types and
-/// source types.
+/// specification's expression functions, the tests' layer types and source
+/// types, and the built-in projections.
 pub(crate) fn registry() -> std::sync::Arc<crate::Registry> {
     static REGISTRY: std::sync::LazyLock<std::sync::Arc<crate::Registry>> = std::sync::LazyLock::new(|| {
         let mut builder = crate::RegistryBuilder::new();
         mln_style::expression::functions::register_builtin_functions(builder.functions_mut())
+            .and_then(|()| crate::register_builtin_projections(&mut builder))
             .and_then(|()| types::layers::register_layer_types(&mut builder))
             .and_then(|()| types::register_source_types(&mut builder))
             .expect("the tests' types register into an empty builder");
