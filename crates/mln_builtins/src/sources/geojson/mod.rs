@@ -223,6 +223,7 @@ fn create(features: Features, collection: bool, options: &Arc<GeoJSONOptions>) -
             extent: constants::EXTENT as u16,
             radius: scale * f64::from(options.cluster_radius),
             min_points: options.cluster_min_points,
+            ..Default::default()
         };
         let expressions = ClusterExpressions(&options.cluster_properties);
         let aggregate: Option<&dyn cluster::Aggregate> =
@@ -251,8 +252,8 @@ fn create(features: Features, collection: bool, options: &Arc<GeoJSONOptions>) -
 pub type TileFeatures = Vec<Feature<i16, Arc<PropertyMap>>>;
 pub type Features = Vec<Feature<f64>>;
 
-/// The space that features' positions are in. Tiles are cut in the unit
-/// square that tile 0/0/0 covers, with y down.
+/// The space that features' positions are in. Tiles are cut, and points
+/// clustered, in the unit square that tile 0/0/0 covers, with y down.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Coordinates {
     /// Longitude and latitude, in degrees, which Web Mercator puts in the
@@ -272,6 +273,15 @@ impl Coordinates {
         match self {
             Coordinates::LngLat => mercator::project(c),
             Coordinates::UnitSquare => c,
+        }
+    }
+
+    /// The position in this space of `p`, a position in the unit square.
+    #[must_use]
+    pub(crate) fn unproject(self, p: Coord) -> Coord {
+        match self {
+            Coordinates::LngLat => mercator::unproject(p),
+            Coordinates::UnitSquare => p,
         }
     }
 }
