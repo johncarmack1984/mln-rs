@@ -12,6 +12,7 @@ pub mod tile;
 
 use std::sync::Arc;
 
+use geo_types::Coord;
 use geojson::GeoJson;
 use mln_engine::exec::pool::TaskGroup;
 use mln_engine::map::MapMode;
@@ -238,6 +239,7 @@ fn create(features: Features, collection: bool, options: &Arc<GeoJSONOptions>) -
             buffer: (scale * f64::from(options.buffer)).round() as u16,
             tolerance: scale * options.tolerance,
             line_metrics: options.line_metrics,
+            ..Default::default()
         },
         ..Default::default()
     };
@@ -248,6 +250,31 @@ fn create(features: Features, collection: bool, options: &Arc<GeoJSONOptions>) -
 /// source feature share its property map.
 pub type TileFeatures = Vec<Feature<i16, Arc<PropertyMap>>>;
 pub type Features = Vec<Feature<f64>>;
+
+/// The space that features' positions are in. Tiles are cut in the unit
+/// square that tile 0/0/0 covers, with y down.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Coordinates {
+    /// Longitude and latitude, in degrees, which Web Mercator puts in the
+    /// unit square. Latitudes past its limit (about ±85.05°) land on the
+    /// square's top or bottom edge.
+    #[default]
+    LngLat,
+    /// Positions in the unit square already, as data in another projection
+    /// has them, taken as they are.
+    UnitSquare,
+}
+
+impl Coordinates {
+    /// The position in the unit square of `c`, a position in this space.
+    #[must_use]
+    pub(crate) fn project(self, c: Coord) -> Coord {
+        match self {
+            Coordinates::LngLat => mercator::project(c),
+            Coordinates::UnitSquare => c,
+        }
+    }
+}
 
 pub trait GeoJSONData: Send + Sync {
     /// The features of tile `id`, made on the calling thread. The data may
