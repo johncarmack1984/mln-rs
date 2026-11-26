@@ -2485,7 +2485,6 @@ dependencies = [
  "mln-rs-image",
  "mln-rs-map",
  "mln-rs-map-types",
- "mln-rs-math",
  "mln-rs-mtl",
  "mln-rs-polylabel",
  "mln-rs-renderer",
@@ -2556,7 +2555,7 @@ name = "mln-rs-bench-workload"
 version = "0.0.17"
 dependencies = [
  "mln-rs-map",
- "mln-rs-util",
+ "mln-rs-style",
  "serde",
  "serde_json",
  "sha2",
@@ -2656,11 +2655,11 @@ dependencies = [
  "mln-rs-gl",
  "mln-rs-image",
  "mln-rs-map",
- "mln-rs-math",
  "mln-rs-mtl",
  "mln-rs-renderer",
  "mln-rs-runtime",
  "mln-rs-storage",
+ "mln-rs-style",
  "mln-rs-util",
  "mln-rs-vulkan",
  "mln-rs-webgpu",
@@ -2684,7 +2683,6 @@ dependencies = [
  "geojson",
  "mln-rs-feature",
  "mln-rs-style",
- "mln-rs-util",
  "mln-rs-vec-map",
  "serde_json",
 ]
@@ -2705,7 +2703,7 @@ name = "mln-rs-frame-pacer"
 version = "0.0.17"
 dependencies = [
  "libc",
- "mln-rs-util",
+ "mln-rs-style",
  "objc2 0.6.5",
  "objc2-core-foundation",
  "objc2-foundation 0.3.2",
@@ -2806,7 +2804,6 @@ dependencies = [
  "mln-rs-image",
  "mln-rs-map",
  "mln-rs-map-types",
- "mln-rs-math",
  "mln-rs-mtl",
  "mln-rs-pixelmatch",
  "mln-rs-renderer",
@@ -2834,6 +2831,7 @@ dependencies = [
  "image-webp",
  "js-sys",
  "log",
+ "mln-rs-style",
  "mln-rs-util",
  "png 0.18.1",
  "wasm-bindgen",
@@ -2854,7 +2852,6 @@ dependencies = [
  "mln-rs-geometry",
  "mln-rs-image",
  "mln-rs-map-types",
- "mln-rs-math",
  "mln-rs-renderer",
  "mln-rs-sprite",
  "mln-rs-storage",
@@ -2873,17 +2870,12 @@ dependencies = [
  "glam",
  "mln-rs-geometry",
  "mln-rs-gfx",
- "mln-rs-math",
  "mln-rs-style",
  "mln-rs-tile-id",
  "mln-rs-util",
  "mln-rs-wire",
  "thiserror 2.0.21",
 ]
-
-[[package]]
-name = "mln-rs-math"
-version = "0.0.17"
 
 [[package]]
 name = "mln-rs-mtl"
@@ -2938,7 +2930,6 @@ dependencies = [
  "mln-rs-image",
  "mln-rs-map",
  "mln-rs-map-types",
- "mln-rs-math",
  "mln-rs-pixelmatch",
  "mln-rs-renderer",
  "mln-rs-storage",
@@ -2971,7 +2962,6 @@ dependencies = [
  "mln-rs-image",
  "mln-rs-map",
  "mln-rs-map-types",
- "mln-rs-math",
  "mln-rs-pixelmatch",
  "mln-rs-polylabel",
  "mln-rs-sprite",
@@ -3012,7 +3002,6 @@ dependencies = [
  "mln-rs-gl",
  "mln-rs-image",
  "mln-rs-map",
- "mln-rs-math",
  "mln-rs-mtl",
  "mln-rs-renderer",
  "mln-rs-storage",
@@ -3120,8 +3109,6 @@ dependencies = [
  "mln-rs-feature",
  "mln-rs-geojson",
  "mln-rs-geometry",
- "mln-rs-math",
- "mln-rs-util",
  "mln-rs-vec-map",
  "mln-rs-wire",
  "objc2 0.6.5",
@@ -3134,6 +3121,7 @@ dependencies = [
  "thiserror 2.0.21",
  "unicode-properties",
  "wasm-bindgen",
+ "web-time",
  "writeable",
 ]
 
@@ -3178,7 +3166,6 @@ dependencies = [
  "harfrust 0.15.0",
  "js-sys",
  "log",
- "mln-rs-math",
  "mln-rs-style",
  "mln-rs-util",
  "mln-rs-vec-map",
@@ -3204,9 +3191,7 @@ dependencies = [
  "log",
  "mln-rs-feature",
  "mln-rs-geometry",
- "mln-rs-math",
  "mln-rs-style",
- "mln-rs-util",
  "mln-rs-wire",
  "mlt-core",
  "parking_lot",
@@ -3219,7 +3204,6 @@ name = "mln-rs-tile-id"
 version = "0.0.17"
 dependencies = [
  "mln-rs-geometry",
- "mln-rs-math",
  "mln-rs-style",
  "mln-rs-util",
  "mln-rs-wire",
@@ -3237,21 +3221,14 @@ name = "mln-rs-util"
 version = "0.0.17"
 dependencies = [
  "flate2",
- "foldhash 0.2.0",
  "geo-types",
  "glam",
  "httpdate",
  "log",
  "mln-rs-feature",
  "mln-rs-geometry",
- "mln-rs-math",
  "mln-rs-style",
- "mln-rs-tile-id",
- "mln-rs-wire",
  "parking_lot",
- "serde_json",
- "thiserror 2.0.21",
- "web-time",
 ]
 
 [[package]]
@@ -3299,6 +3276,7 @@ dependencies = [
  "mln-rs-renderer",
  "mln-rs-runtime",
  "mln-rs-storage",
+ "mln-rs-style",
  "mln-rs-util",
  "mln-rs-web-host",
  "mln-rs-webgpu",
@@ -3317,6 +3295,7 @@ dependencies = [
  "js-sys",
  "log",
  "mln-rs-renderer",
+ "mln-rs-style",
  "mln-rs-text",
  "mln-rs-util",
  "mln-rs-wire",

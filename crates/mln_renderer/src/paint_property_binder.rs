@@ -14,12 +14,12 @@ use mln_style::expression::{Dependency, EvaluationContext, Image, Value, ValueCo
 use mln_style::feature::GeometryTileFeature;
 use mln_style::property::evaluated::{Evaluated, Faded};
 use mln_style::property::expression::PropertyExpression;
+use mln_style::range::Range;
 use mln_style::tile_id::CanonicalTileID;
 use mln_style::types::LineCapType;
 use mln_text::atlas::ImagePositions;
 use mln_tile::TileLayer;
 use mln_util::feature::feature_id_to_string;
-use mln_util::range::Range;
 use mln_vec_map::VecMap;
 
 use crate::bucket_geometry::GeometryVec;
@@ -386,9 +386,9 @@ impl<T: BinderValue> PaintPropertyBinder<T> {
                 let possibly_rounded_zoom =
                     if expression.get_use_integer_zoom() { current_zoom.floor() } else { current_zoom };
 
-                mln_math::fmaxf(
+                mln_style::math::fmaxf(
                     0.0,
-                    mln_math::fminf(1.0, expression.interpolation_factor(*zoom_range, possibly_rounded_zoom)),
+                    mln_style::math::fminf(1.0, expression.interpolation_factor(*zoom_range, possibly_rounded_zoom)),
                 )
             }
         }

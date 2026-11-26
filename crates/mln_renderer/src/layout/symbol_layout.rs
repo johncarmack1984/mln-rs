@@ -10,6 +10,8 @@ use std::sync::Arc;
 use geometry::Point;
 use glam::Vec2;
 use mln_map_types::MapMode;
+use mln_style::constants::{EXTENT, TILE_SIZE_D};
+use mln_style::error::Error;
 use mln_style::expression::formatted::K_FORMATTED_SECTION_TEXT_COLOR;
 use mln_style::expression::{EvaluationContext, GlobalStateMap, Value};
 use mln_style::feature::{GeometryCoordinate, GeometryCoordinates, GeometryTileFeature};
@@ -19,6 +21,7 @@ use mln_style::layers::symbol_layer_properties::SymbolLayoutProperties;
 use mln_style::padding::Padding;
 use mln_style::property::evaluated::Evaluated;
 use mln_style::property::value::PropertyValue;
+use mln_style::range::Range;
 use mln_style::tile_id::CanonicalTileID;
 use mln_style::types::{
     AlignmentType, AnchorOffsetPair, IconTextFitType, SymbolAnchorType, SymbolPlacementType, SymbolZOrderType,
@@ -31,9 +34,7 @@ use mln_text::glyph::{GlyphID, GlyphIDType, GlyphPositions, Shaping};
 use mln_text::shaping::{PositionedIcon, ShapingOptions, anchor_justification, shape_text};
 use mln_text::tagged_string::{SectionIndex, SectionOptions};
 use mln_text::{ShapedText, TaggedString, shape_arabic, starts_right_to_left};
-use mln_util::constants::{EXTENT, ONE_EM, TILE_SIZE_D};
-use mln_util::error::Error;
-use mln_util::range::Range;
+use mln_util::constants::ONE_EM;
 use mln_vec_map::VecMap;
 
 use crate::bucket_parameters::BucketParameters;
@@ -266,7 +267,7 @@ const BASELINE_OFFSET: f32 = 7.0;
 
 fn evaluate_radial_offset(anchor: SymbolAnchorType, radial_offset: f32) -> [f32; 2] {
     let mut result = [0.0_f32, 0.0_f32];
-    let radial_offset = mln_math::fmaxf(radial_offset, 0.0); // Ignore negative offset.
+    let radial_offset = mln_style::math::fmaxf(radial_offset, 0.0); // Ignore negative offset.
     // Solve for r where r^2 + r^2 = radial_offset^2.
     let hypotenuse = radial_offset / std::f32::consts::SQRT_2;
 
