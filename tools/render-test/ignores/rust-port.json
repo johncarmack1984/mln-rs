@@ -95,6 +95,5 @@
   "render-tests/circle-radius/antimeridian": "The view is 514 px wide at zoom 0, wider than the world, but its tile cover holds only the wrap 0 tile, so the part of a circle that reaches across the antimeridian from the next world copy isn't drawn. The test passed while a still image's tiles drew the points in their buffers too",
   "render-tests/line-gradient-dasharray/step-gradient": "At three of the gradient's steps one pixel blends the two steps' colors where the expected image has one of them, and a dash end's edge pixel is opaque where the expected image's is 78% opaque (#1057)",
   "render-tests/sky/atmosphere-globe": "Along the globe's edge the atmosphere writes premultiplied colors brighter than their alpha, which a PNG can't hold; the expected image holds them as the PNG encoding wrapped them (#1058)",
-  "gljs/render-tests/projection/identity/hillshade": "Hillshade corrects slopes for Mercator's latitude and reads the DEM in Mercator's meters, not the registered projection's units, until the CRS port's unit 8 takes the latitude correction out",
   "gljs/render-tests/projection/identity/geojson": "GeoJSON is tiled in Mercator, not in the registered projection, until the CRS port's unit 9 projects it in the workers"
 }

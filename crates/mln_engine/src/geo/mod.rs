@@ -102,9 +102,15 @@ pub(crate) struct LatLngAltitude {
     pub(crate) altitude: f64,
 }
 
-/// The latitudes of the north and the south edges of `id`, in degrees.
+/// The latitudes of the north and the south edges of `id`, in degrees, by
+/// which the hillshade shader undoes Mercator's stretch of slopes: `[0, 0]`,
+/// no correction, in a registered projection's `world`, which doesn't wrap
+/// and draws in its own units.
 #[must_use]
-pub fn lat_range(id: &crate::tile::UnwrappedTileID) -> [f32; 2] {
+pub fn lat_range(id: &crate::tile::UnwrappedTileID, world: &world::WorldMapping) -> [f32; 2] {
+    if !world.wraps() {
+        return [0.0, 0.0];
+    }
     let latlng0 = LatLng::from_unwrapped_tile(id.canonical.z, id.canonical.x, id.canonical.y, id.wrap);
     let below =
         crate::tile::UnwrappedTileID::new(id.canonical.z, i64::from(id.canonical.x), i64::from(id.canonical.y) + 1);

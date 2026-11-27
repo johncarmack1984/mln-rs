@@ -386,3 +386,15 @@ fn mappings_are_equal_when_they_are_the_same_one() {
     assert_ne!(a, WorldMapping::Mercator);
     assert_eq!(WorldMapping::Mercator, WorldMapping::Mercator);
 }
+
+// gtest: HillshadeTweaker.NoLatitudeRangeInAWorldThatDoesNotWrap
+#[test]
+fn a_world_that_doesnt_wrap_has_no_latitude_range() {
+    let id = crate::tile::UnwrappedTileID::new(12, 758, 100);
+    assert_eq!([0.0, 0.0], crate::geo::lat_range(&id, &identity()));
+    // The same tile row in Mercator is past 84 N, where the shader divides
+    // slopes by the cosine of the latitude.
+    let mercator = crate::geo::lat_range(&id, &WorldMapping::Mercator);
+    assert!(mercator[1] > 84.0, "{mercator:?}");
+    assert!(mercator[0] > mercator[1], "{mercator:?}");
+}
