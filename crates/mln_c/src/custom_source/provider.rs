@@ -389,10 +389,10 @@ impl CustomGeometryProvider {
     /// functions run on `pool`. It cuts the host's GeoJSON in its turn,
     /// only for a tile that needs it.
     pub(crate) fn of_source(options: &CustomGeometrySourceOptions, pool: &Pool) -> Arc<Self> {
-        let tile_options = Arc::clone(&options.tile_options);
+        let (tile_options, crs) = (Arc::clone(&options.tile_options), options.crs.clone());
         CustomProvider::new(pool, |provider| {
             let make: MakeData<_, Arc<TileFeatures>> = Arc::new(move |geojson, tile_id: &CanonicalTileID| {
-                Arc::new(tile_features(geojson, tile_id, &tile_options))
+                Arc::new(tile_features(geojson, tile_id, &tile_options, crs.as_deref()))
             });
             host_functions(&options.tile_functions, Responder { provider: Weak::clone(provider), make })
         })

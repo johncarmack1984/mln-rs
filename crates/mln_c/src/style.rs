@@ -1248,6 +1248,7 @@ pub(crate) unsafe extern "C" fn mln_map_add_custom_geometry_source(
                 tile_options: Arc::new(tile_options),
                 zoom_range: zooms,
                 tile_functions: Arc::new(tile_functions),
+                crs: None,
             };
             Source::new(&id, SourceData::<CustomGeometrySourceType>::new(options))
         };
