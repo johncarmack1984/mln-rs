@@ -9,6 +9,7 @@ use mln_style::geo::{LatLng, WrapMode};
 use crate::camera::transform::{TerrainGround, Transform, flip_y, lowest_ground};
 use crate::camera::{Camera, CameraOptions, Elevation, MapView, TransformState, View};
 use crate::geo::ScreenCoordinate;
+use crate::geo::projection::Projection;
 use crate::geo::world::WorldMapping;
 use crate::map::map::Map;
 
@@ -85,6 +86,43 @@ impl MapProjection {
         self.state.view().drawn_height_at(lat_lng, &**self.ground.as_ref()?)
     }
 
+    /// How many meters a pixel spans at `latitude` on the meridian through
+    /// the camera's center, as [`meters_per_pixel_at`](Self::meters_per_pixel_at)
+    /// measures them.
+    #[must_use]
+    pub fn meters_per_pixel_at_latitude(&self, latitude: f64) -> f64 {
+        let longitude = self.state.view().center(WrapMode::Unwrapped).longitude();
+        self.meters_per_pixel_at_lng_lat([longitude, latitude])
+    }
+
+    /// How many meters a pixel spans at `lat_lng`, at the camera's zoom,
+    /// whatever its pitch and bearing: Web Mercator's scale at its latitude,
+    /// also on the globe, or in a registered projection the ground distance
+    /// from `lat_lng` to the place 100 pixels from it along the projection's
+    /// x axis, over 100, as GL JS's geolocate control measures it. NaN where
+    /// the projection has no place there.
+    #[must_use]
+    pub fn meters_per_pixel_at(&self, lat_lng: &LatLng) -> f64 {
+        self.meters_per_pixel_at_lng_lat([lat_lng.longitude(), lat_lng.latitude()])
+    }
+
+    /// [`meters_per_pixel_at`](Self::meters_per_pixel_at) a lng/lat in
+    /// degrees.
+    fn meters_per_pixel_at_lng_lat(&self, lng_lat: [f64; 2]) -> f64 {
+        let view = self.state.view();
+        let world = view.world();
+        if world.wraps() {
+            return Projection::meters_per_pixel_at_latitude(lng_lat[1], view.zoom());
+        }
+        let mut place = [[0.0; 2]];
+        world.world_from_lng_lats(&[lng_lat], &mut place);
+        let [x, y] = place[0];
+        let span = SCALE_SPAN_PX / Projection::world_size(view.scale());
+        let mut end = [[0.0; 2]];
+        world.lng_lats_from_world(&[[x + span, y]], &mut end);
+        ground_distance(lng_lat, end[0]) / SCALE_SPAN_PX
+    }
+
     /// Whether the globe hides `lat_lng` from the camera; a Mercator view
     /// hides nothing.
     #[must_use]
@@ -126,6 +164,25 @@ impl MapProjection {
     fn transform(&self) -> Transform {
         Transform::from_state(self.state.clone())
     }
+}
+
+/// How many pixels apart the places are whose ground distance gives a
+/// registered projection's meters per pixel: GL JS's geolocate control's
+/// default width.
+const SCALE_SPAN_PX: f64 = 100.0;
+
+/// The earth's mean radius in meters, GL JS's `earthRadius`, on which its
+/// `LngLat.distanceTo` measures.
+const MEAN_EARTH_RADIUS_M: f64 = 6_371_008.8;
+
+/// The ground distance in meters between two lng/lats in degrees, GL JS's
+/// `LngLat.distanceTo`: the spherical law of cosines on the earth's mean
+/// radius.
+fn ground_distance([lng_a, lat_a]: [f64; 2], [lng_b, lat_b]: [f64; 2]) -> f64 {
+    let (lat_a, lat_b) = (lat_a.to_radians(), lat_b.to_radians());
+    let cos = lat_a.sin() * lat_b.sin() + lat_a.cos() * lat_b.cos() * (lng_b - lng_a).to_radians().cos();
+    // `Math.min`, which keeps a NaN.
+    MEAN_EARTH_RADIUS_M * (if cos > 1.0 { 1.0 } else { cos }).acos()
 }
 
 /// The screen point (y down) of `lat_lng` in `view`, in the copy of the world

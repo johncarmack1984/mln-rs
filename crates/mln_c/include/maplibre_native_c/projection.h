@@ -191,7 +191,11 @@ MLN_API mln_status mln_map_projection_get_terrain_elevation(
  * Computes how many meters one screen pixel covers at `latitude`, at the
  * projection's zoom.
  *
- * The result ignores the camera's pitch.
+ * The result ignores the camera's pitch. On a map in a registered projection,
+ * it is the ground distance, on a sphere of the earth's mean radius, from
+ * where `latitude` crosses the meridian through the camera's center to the
+ * point 100 pixels from there along the projection's x axis, over 100, as
+ * MapLibre GL JS's geolocate control measures it.
  */
 MLN_API mln_status mln_map_projection_meters_per_pixel_at_latitude(
   mln_map_projection projection, double latitude,

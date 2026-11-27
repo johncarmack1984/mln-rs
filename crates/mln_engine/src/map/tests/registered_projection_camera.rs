@@ -7,6 +7,7 @@ use mln_style::size::Size;
 
 use crate::camera::{BoundOptions, CameraOptions, ConstrainMode, MapProjection};
 use crate::exec::queue::Queue;
+use crate::geo::projection::Projection;
 use crate::geo::world::WorldMapping;
 use crate::geo::{EdgeInsets, ScreenCoordinate};
 use crate::map::{Map, MapOptions};
@@ -332,4 +333,51 @@ fn a_center_beyond_the_pole_stays_inside_the_max_bounds_of_a_polar_cap() {
     let center = map.transform_state().view().center(WrapMode::Unwrapped);
     assert_near(70.0, center.latitude(), 1e-6);
     assert_near(45.0, center.longitude(), 1e-6);
+}
+
+/// Meters per pixel as GL JS's geolocate control measures them in a
+/// registered projection: the ground distance from a location to the place
+/// 100 pixels from it along the projection's x axis, by GL JS's
+/// `LngLat.distanceTo`, over 100, whichever way the camera looks. The numbers
+/// are GL JS's for its test polar stereographic projection (MapLibre
+/// Native's `Map.MetersPerPixelInARegisteredProjection`). Mercator keeps its
+/// scale at the latitude.
+#[test]
+fn meters_per_pixel_are_the_projections() {
+    let run_loop = Queue::<()>::new();
+    let mut mercator = map(512, Vec::new(), &run_loop);
+    mercator.load_style_json(&style("mercator", [10.0, 40.0], 3.5));
+    let mercator = MapProjection::new(&mercator);
+    for latitude in [0.0, 40.0, -70.0] {
+        let scale = Projection::meters_per_pixel_at_latitude(latitude, 3.5);
+        assert_eq!(scale, mercator.meters_per_pixel_at_latitude(latitude));
+        assert_eq!(scale, mercator.meters_per_pixel_at(&ll(latitude, 20.0)));
+    }
+
+    let gl_js = |expected: f64, actual: f64| {
+        assert!(((actual - expected) / expected).abs() < 1e-9, "{actual} is not GL JS's {expected}");
+    };
+    let mut map = map(512, vec![crs::polar_stereographic("test:polar")], &run_loop);
+    map.load_style_json(&style("test:polar", [-45.0, 70.0], 4.0));
+    let camera = |center, zoom, bearing, pitch| CameraOptions {
+        center: Some(center),
+        zoom: Some(zoom),
+        bearing: Some(bearing),
+        pitch: Some(pitch),
+        ..CameraOptions::default()
+    };
+    let cameras = [
+        (ll(70.0, -45.0), 4.0, ll(70.0, -45.0), 1_022.832_584_048_677_6),
+        (ll(80.0, 30.0), 6.0, ll(81.0, 40.0), 261.998_661_983_620_9),
+        (ll(60.0, -100.0), 8.0, ll(60.1, -100.2), 61.535_774_394_909_105),
+    ];
+    for (center, zoom, location, meters) in cameras {
+        map.jump_to(&camera(center, zoom, 0.0, 0.0));
+        gl_js(meters, MapProjection::new(&map).meters_per_pixel_at(&location));
+    }
+    let (center, zoom, location, meters) = cameras[0];
+    map.jump_to(&camera(center, zoom, 30.0, 45.0));
+    gl_js(meters, MapProjection::new(&map).meters_per_pixel_at(&location));
+    // At the latitude, on the center's meridian.
+    gl_js(meters, MapProjection::new(&map).meters_per_pixel_at_latitude(location.latitude()));
 }
