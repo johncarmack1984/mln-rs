@@ -566,8 +566,9 @@ impl View {
         FreeCameraOptions { position: Some(camera.position), orientation: Some(camera.orientation) }
     }
 
-    /// Where the camera's eye is: its Web Mercator point at zoom 0 (from 0
-    /// to 1 across, y south) and its altitude in meters, of the meters the
+    /// Where the camera's eye is: its point in the world square at zoom 0,
+    /// Web Mercator's or a registered projection's (from 0 to 1 across, y
+    /// south), and its altitude in meters, of the meters the
     /// view places heights in ([`center_altitude`](Self::center_altitude)).
     /// On the globe it is the point under the eye, in the world copy nearest
     /// the center, with y past 0 or 1 over a polar cap, and the eye's height

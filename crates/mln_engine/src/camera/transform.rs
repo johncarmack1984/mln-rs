@@ -15,6 +15,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use geometry::Point;
+use glam::DVec3;
 use mln_style::error::Error;
 use mln_style::geo::{LatLng, WrapMode};
 use mln_style::size::Size;
@@ -25,10 +26,11 @@ use parking_lot::Mutex;
 use crate::camera::{
     AnimationOptions, CameraLimits, CameraOptions, CenterAndBearing, ConstrainMode, FreeCameraOptions,
     NorthOrientation, ProjectionMode, TransformState, TransitionEnd, VerticalPerspectiveProjection, View, ViewportMode,
+    camera_pose,
 };
 use crate::geo::constants::M2PI;
 use crate::geo::world::WorldMapping;
-use crate::geo::{EdgeInsets, ScreenCoordinate};
+use crate::geo::{EdgeInsets, LatLngAltitude, ScreenCoordinate};
 use crate::log_target;
 
 mod anchor;
@@ -790,9 +792,45 @@ impl Transform {
         self.view().screen_coordinate_to_lat_lng_at(&flip_y(self.view(), point), height, wrap_mode)
     }
 
+    /// The camera's position and orientation as the map gives them: on a
+    /// map in a registered projection, the position is the Web Mercator one
+    /// ([`FreeCameraOptions::position`]) of the lat/lng and the altitude of
+    /// the camera's place in the projection's world square, where the
+    /// projection's units count as meters.
+    pub(crate) fn free_camera_options(&self) -> FreeCameraOptions {
+        let options = self.view().free_camera_options();
+        let world = self.view().world();
+        let (WorldMapping::Crs(_), Some(position)) = (world, options.position) else {
+            return options;
+        };
+        let point = Point::new(position.x, position.y);
+        let position = world
+            .lat_lng_from_world(&point)
+            .ok()
+            .map(|location| camera_pose::to_mercator(&location, position.z * world.meters_per_world_unit(&point)));
+        FreeCameraOptions { position, ..options }
+    }
+
+    /// Places the camera by `options`, as
+    /// [`free_camera_options`](Self::free_camera_options) gives them: on a
+    /// map in a registered projection, at the place in its world square of
+    /// the lat/lng that the position stands for, at its altitude. A position
+    /// that isn't finite has no lat/lng, and is ignored, as a NaN one is.
     pub(crate) fn set_free_camera_options(&mut self, options: &FreeCameraOptions) {
         self.cancel_transitions();
-        self.state.set_free_camera_options(options);
+        let world = self.view().world();
+        let options = match (world, options.position) {
+            (WorldMapping::Crs(_), Some(position)) => {
+                let location = position.is_finite().then(|| camera_pose::lat_lng_altitude_from_mercator(position));
+                let position = location.flatten().map(|LatLngAltitude { location, altitude }| {
+                    let point = world.world_from_lat_lng(&location);
+                    DVec3::new(point.x, point.y, altitude / world.meters_per_world_unit(&point))
+                });
+                FreeCameraOptions { position, ..*options }
+            }
+            _ => *options,
+        };
+        self.state.set_free_camera_options(&options);
     }
 }
 

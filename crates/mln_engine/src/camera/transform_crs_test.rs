@@ -192,7 +192,7 @@ fn the_identity_round_trips_the_free_camera() {
     let mut transform = transform_in(identity(), 512, 512);
     transform.jump_to(&CameraOptions { pitch: Some(40.0), bearing: Some(25.0), ..camera(20.0, -30.0, 5.0) });
 
-    let free_camera = transform.view().free_camera_options();
+    let free_camera = transform.free_camera_options();
     let mut round_trip = transform_in(identity(), 512, 512);
     round_trip.set_free_camera_options(&free_camera);
 
@@ -324,4 +324,108 @@ fn a_registered_projection_stays_flat_in_a_flipped_viewport() {
     transform.set_viewport_mode(ViewportMode::Default);
     assert_eq!("identity", transform.view().world().name());
     assert!(!transform.view().is_globe());
+}
+
+/// The free camera position, in Web Mercator units, of `location` at
+/// `altitude` meters.
+fn mercator_position(location: LatLng, altitude: f64) -> glam::DVec3 {
+    let mut options = crate::camera::FreeCameraOptions::default();
+    options.set_location(&crate::geo::LatLngAltitude { location, altitude });
+    options.position.unwrap()
+}
+
+#[track_caller]
+fn assert_near_each(expected: glam::DVec3, actual: glam::DVec3) {
+    for (expected, actual) in expected.to_array().into_iter().zip(actual.to_array()) {
+        assert_near(expected, actual, expected.abs().max(1.0) * 1e-9);
+    }
+}
+
+// gtest: Map.FreeCameraInARegisteredProjectionIsPlacedByItsLatLngAndAltitude
+// A free camera's position is in Web Mercator units on a map in a
+// registered projection too, and stands for the lat/lng and the altitude of
+// the camera there: the numbers are GL JS's for its test polar
+// stereographic projection on a 256 by 256 map, from its own
+// `calculateCameraOptionsFromCameraLngLatAltRotation` and the camera
+// position its camera math reads.
+#[test]
+fn a_free_camera_in_a_registered_projection_is_placed_by_its_lat_lng_and_altitude() {
+    let mut transform = transform_in(mapping(crs::polar_stereographic("test:polar")), 256, 256);
+    transform.jump_to(&CameraOptions { bearing: Some(30.0), pitch: Some(40.0), ..CameraOptions::default() });
+    let placed = crate::camera::FreeCameraOptions {
+        position: Some(mercator_position(ll(75.0, 20.0), 600_000.0)),
+        orientation: transform.free_camera_options().orientation,
+    };
+    transform.set_free_camera_options(&placed);
+    let camera_options = transform.camera_options(None);
+    assert_near(73.931_949_836_939_65, center(&transform).latitude(), 1e-9);
+    assert_near(36.691_498_217_875_11, center(&transform).longitude(), 1e-9);
+    assert_near(3.005_859_525_185_552, transform.view().zoom(), 1e-9);
+    assert_near(30.0, camera_options.bearing.unwrap(), 1e-9);
+    assert_near(40.0, camera_options.pitch.unwrap(), 1e-9);
+    let location = transform.free_camera_options().location().expect("a location");
+    assert_near(75.0, location.location.latitude(), 1e-9);
+    assert_near(20.0, location.location.longitude(), 1e-9);
+    assert_near(600_000.0, location.altitude, 600_000.0 * 1e-9);
+
+    // Each view's camera, and the center back from it.
+    let views = [
+        (
+            camera(75.0, 20.0, 5.0),
+            30.0,
+            40.0,
+            (ll(75.055_752_438_524_25, 15.550_080_695_737_407), 150_610.465_872_736_04),
+            ll(75.0, 19.999_999_999_999_986),
+        ),
+        (
+            camera(88.0, 100.0, 6.0),
+            -60.0,
+            50.0,
+            (ll(87.825_283_649_943_29, 81.368_661_280_613_5), 63_188.593_182_625_57),
+            ll(88.0, 99.999_999_999_999_94),
+        ),
+        (camera(90.0, 0.0, 3.0), 0.0, 0.0, (ll(90.0, 135.0), 786_432.0), ll(90.0, 135.0)),
+    ];
+    for (view, bearing, pitch, (location, altitude), center_from_camera) in views {
+        let view = CameraOptions { bearing: Some(bearing), pitch: Some(pitch), ..view };
+        transform.jump_to(&view);
+        let free_camera = transform.free_camera_options();
+        assert_near_each(mercator_position(location, altitude), free_camera.position.unwrap());
+
+        transform.jump_to(&CameraOptions { bearing: Some(0.0), pitch: Some(0.0), ..camera(70.0, -45.0, 2.0) });
+        transform.set_free_camera_options(&free_camera);
+        let back = transform.camera_options(None);
+        assert_near(center_from_camera.latitude(), center(&transform).latitude(), 1e-9);
+        assert_near(center_from_camera.longitude(), center(&transform).longitude(), 1e-9);
+        assert_near(view.zoom.unwrap(), transform.view().zoom(), 1e-9);
+        assert_near(bearing, back.bearing.unwrap(), 1e-9);
+        assert_near(pitch, back.pitch.unwrap(), 1e-9);
+        let again = transform.free_camera_options();
+        assert_near_each(free_camera.position.unwrap(), again.position.unwrap());
+        let (expected, actual) = (free_camera.orientation.unwrap(), again.orientation.unwrap());
+        for (expected, actual) in expected.to_array().into_iter().zip(actual.to_array()) {
+            assert_near(expected, actual, 1e-9);
+        }
+    }
+
+    // A position that isn't finite has no lat/lng, and leaves the camera.
+    let before = transform.free_camera_options();
+    transform.set_free_camera_options(&crate::camera::FreeCameraOptions {
+        position: Some(glam::DVec3::new(f64::INFINITY, 0.5, 0.1)),
+        orientation: None,
+    });
+    assert_eq!(before, transform.free_camera_options());
+}
+
+// GL JS's "puts the camera above the center when unpitched"
+// (`src/camera/mercator_camera_math.test.ts`): the free camera's position
+// stands for the center's location.
+#[test]
+fn the_identity_puts_an_unpitched_free_camera_above_the_center() {
+    let mut transform = transform_in(identity(), 512, 512);
+    transform.jump_to(&camera(20.0, 10.0, 3.0));
+
+    let under = transform.free_camera_options().location().expect("a location").location;
+    assert_near(20.0, under.latitude(), 1e-9);
+    assert_near(10.0, under.longitude(), 1e-9);
 }

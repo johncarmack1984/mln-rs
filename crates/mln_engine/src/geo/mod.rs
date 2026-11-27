@@ -96,7 +96,6 @@ impl std::ops::Add for EdgeInsets {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-#[cfg(test)]
 pub(crate) struct LatLngAltitude {
     pub(crate) location: LatLng,
     pub(crate) altitude: f64,

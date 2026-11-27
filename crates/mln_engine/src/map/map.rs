@@ -1696,7 +1696,7 @@ impl Map {
         let transform = &self.transform;
         let state = transform.state();
         let bounds = state.limits().bounds;
-        let free_camera = state.view().free_camera_options();
+        let free_camera = transform.free_camera_options();
         MapSnapshot {
             generation: self.generation,
             update_generation: self.updates.generation(),
