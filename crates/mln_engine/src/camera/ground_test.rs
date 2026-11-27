@@ -5,6 +5,7 @@ use mln_style::types::ProjectionDefinition;
 
 use crate::camera::{Camera, Elevation, LogicalExtent, MapView, ProjectionMode, View, ViewportMode};
 use crate::geo::projection::Projection;
+use crate::geo::world::WorldMapping;
 use crate::geo::{EdgeInsets, ScreenCoordinate};
 
 const CENTER: (f64, f64) = (46.5, 7.9);
@@ -76,7 +77,7 @@ fn view(pitch: f64, center_altitude: f64, lowest: f64) -> View {
         viewport: crate::camera::Viewport::default(),
         projection: ProjectionDefinition::default(),
     }
-    .to_state()
+    .to_state(&WorldMapping::Mercator)
     .unwrap();
     state.set_terrain_min_elevation(Some(lowest));
     state.view().clone()
@@ -238,7 +239,7 @@ fn height_zero_matches_the_flat_conversions_bit_for_bit() {
                 viewport: crate::camera::Viewport { viewport_mode, ..crate::camera::Viewport::default() },
                 projection: ProjectionDefinition::default(),
             }
-            .to_view()
+            .to_view(&WorldMapping::Mercator)
             .unwrap()
         },
     );
@@ -303,7 +304,7 @@ fn globe_view(pitch: f64, center_altitude: f64, lowest: f64) -> View {
         viewport: crate::camera::Viewport::default(),
         projection: ProjectionDefinition::new(mln_style::types::ProjectionType::VerticalPerspective),
     }
-    .to_state()
+    .to_state(&WorldMapping::Mercator)
     .unwrap();
     state.set_terrain_min_elevation(Some(lowest));
     assert!(state.view().is_globe());
@@ -388,7 +389,7 @@ fn polar_view(pitch: f64, bearing: f64, center_altitude: f64) -> View {
         viewport: crate::camera::Viewport::default(),
         projection: ProjectionDefinition::new(mln_style::types::ProjectionType::VerticalPerspective),
     }
-    .to_state()
+    .to_state(&WorldMapping::Mercator)
     .unwrap();
     state.set_terrain_min_elevation(Some(0.0));
     assert!(state.view().is_globe());

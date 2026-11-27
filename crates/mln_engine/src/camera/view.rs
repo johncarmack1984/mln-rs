@@ -1092,6 +1092,20 @@ impl View {
         self.params.world.unproject(&coord.p, 1.0 / TILE_SIZE_D, wrap_mode)
     }
 
+    /// Whether the line of sight through `point`, measured from the bottom
+    /// edge (y up), meets the plane `height` meters above sea level at a
+    /// place with a location of its own ([`WorldMapping::has_lat_lng`]):
+    /// anywhere in a world that wraps and on the globe, and in a registered
+    /// projection's world not past where its converter answers, as above or
+    /// below the identity's square, which the map shows as it shows the sky.
+    pub(crate) fn has_lat_lng_at(&self, point: &ScreenCoordinate, height: f64) -> bool {
+        if self.params.world.wraps() || self.is_globe() {
+            return true;
+        }
+        let world = self.mercator_screen_coordinate_to_tile_coordinate(point, 0, height).p;
+        self.params.world.has_lat_lng(&world)
+    }
+
     /// The line of sight through `point`, measured from the bottom edge (y
     /// up), from the near plane to the far plane: each end's Web Mercator
     /// point at zoom 0 (x in the world copy the view shows it in) and its

@@ -343,6 +343,11 @@ impl Transform {
         if let Some(a) = anchor.as_mut() {
             anchor_height = self.anchor_height(a, a);
             a.y = f64::from(self.state.view().size().height) - a.y;
+        }
+        // An anchor past a registered projection's edge holds nothing, and
+        // the command turns around the center, as GL JS's gestures do there.
+        anchor = anchor.filter(|a| self.state.view().has_lat_lng_at(a, anchor_height));
+        if let Some(a) = anchor.as_mut() {
             // An anchor that has no LatLng (NaN or infinite) is logged and
             // ignored.
             match self.state.view().screen_coordinate_to_lat_lng_at(a, anchor_height, WrapMode::Unwrapped) {

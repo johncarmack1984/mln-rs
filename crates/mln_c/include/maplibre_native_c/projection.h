@@ -27,7 +27,9 @@ extern "C" {
  * `view` is the view to convert for, such as a frame result's, or null for the
  * map's current view. Over terrain, coordinates convert on the ground that the
  * map drew. The projection doesn't follow the map, so create a new one after
- * the map's view or terrain changes.
+ * the map's view or terrain changes. A view converts in the projection that the
+ * map's style draws in when the projection is created, also a view from before
+ * the style switched to or from a registered projection.
  *
  * Returns:
  * - MLN_STATUS_INVALID_STATE until mln_runtime_create_map() completes with

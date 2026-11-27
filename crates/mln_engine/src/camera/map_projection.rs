@@ -9,6 +9,7 @@ use mln_style::geo::{LatLng, WrapMode};
 use crate::camera::transform::{TerrainGround, Transform, flip_y, lowest_ground};
 use crate::camera::{Camera, CameraOptions, Elevation, MapView, TransformState, View};
 use crate::geo::ScreenCoordinate;
+use crate::geo::world::WorldMapping;
 use crate::map::map::Map;
 
 /// Converts coordinates for one camera and size, without a map: on the
@@ -38,11 +39,13 @@ impl MapProjection {
     }
 
     /// A projection for one view of a map, from a [`MapSnapshot`] or a
-    /// rendered frame, on the flat map. `Err`: as [`MapView::to_state`].
+    /// rendered frame, on the flat map, where lng/lat maps to the world
+    /// square as `world`, the map's mapping ([`View::world`]), maps it.
+    /// `Err`: as [`MapView::to_state`].
     ///
     /// [`MapSnapshot`]: crate::map::MapSnapshot
-    pub fn from_view(view: &MapView) -> Result<Self, Error> {
-        Ok(Self::from_state(view.to_state()?))
+    pub fn from_view(view: &MapView, world: &WorldMapping) -> Result<Self, Error> {
+        Ok(Self::from_state(view.to_state(world)?))
     }
 
     /// The projection on `ground`, the ground a renderer drew of a terrain
