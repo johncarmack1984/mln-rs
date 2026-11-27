@@ -403,3 +403,34 @@ fn a_registered_projection_set_from_rust_draws_the_map_in_it() {
     assert_near(70.0, view.center(WrapMode::Unwrapped).latitude(), 1e-9);
     assert_near(45.0, view.center(WrapMode::Unwrapped).longitude(), 1e-9);
 }
+
+/// Over terrain in a registered projection, the ground a screen point shows
+/// is located through the projection, and a location stands on the ground
+/// drawn at its place in the projection's world square: here ground that
+/// rises eastward across the identity's square.
+#[test]
+fn ground_hits_are_located_through_the_registered_projection() {
+    let run_loop = Queue::<()>::new();
+    let mut map = map(512, Vec::new(), &run_loop);
+    map.load_style_json(&style("identity", [45.0, 45.0], 1.0));
+    map.jump_to(&CameraOptions { pitch: Some(50.0), ..CameraOptions::default() });
+    // The identity's world is 180 m wide: the eye is about 90 m up.
+    let ground = super::ground::Slope { x: 0.5, height: 10.0, rise: 20.0 };
+    let view = map.transform_state().view();
+
+    for (x, y) in [(256.0, 256.0), (100.0, 150.0), (400.0, 60.0)] {
+        // Measured from the bottom edge.
+        let point = ScreenCoordinate::new(x, y);
+        let hit = view.ground_under(&point, &ground).expect("the ground");
+        let location = view.screen_coordinate_to_lat_lng_on(&point, &ground, WrapMode::Unwrapped).unwrap();
+        let expected = view.world().lat_lng_from_world(&geometry::Point::new(hit.world.x, hit.world.y)).unwrap();
+        assert_eq!(expected, location);
+        assert_eq!(expected, hit.location(view.world(), WrapMode::Unwrapped));
+
+        let drawn = view.drawn_height_at(&location, &ground).unwrap();
+        assert_near(hit.height, drawn, 1e-3);
+        let back = view.lat_lng_to_screen_coordinate_on(&location, &ground);
+        assert_near(x, back.x, 1e-4);
+        assert_near(y, back.y, 1e-4);
+    }
+}

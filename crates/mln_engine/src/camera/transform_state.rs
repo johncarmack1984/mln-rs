@@ -958,24 +958,30 @@ impl TransformState {
     }
 
     /// The center, its altitude and the zoom of [`Self::recenter_on`] on a
-    /// Mercator view, before the limits.
+    /// flat view, Mercator or a registered projection, before the limits.
     fn recentered_on_plane(&self, hit: &GroundHit) -> Option<(LatLng, f64, f64)> {
         let view = &self.view;
+        let mapping = view.world();
         let eye = view.eye_position();
         let forward = view.camera_pose().forward();
-        // Meters per Web Mercator unit at zoom 0, across the ground at `hit`.
-        let latitude = hit.location(WrapMode::Unwrapped).latitude();
-        let meters = Projection::meters_per_pixel_at_latitude(latitude, 0.0) * TILE_SIZE_D;
+        // Meters per world unit at zoom 0, across the ground at `hit`.
+        let meters = match mapping {
+            WorldMapping::Mercator => {
+                let latitude = hit.location(mapping, WrapMode::Unwrapped).latitude();
+                Projection::meters_per_pixel_at_latitude(latitude, 0.0) * TILE_SIZE_D
+            }
+            WorldMapping::Crs(_) => mapping.meters_per_world_unit(&Point::new(hit.world.x, hit.world.y)),
+        };
         let to_hit = DVec3::new((hit.world.x - eye.x) * meters, (hit.world.y - eye.y) * meters, hit.height - eye.z);
         let distance = to_hit.dot(forward);
         if !(distance.is_finite() && distance > 0.0) {
             return None;
         }
         let world = Point::new(eye.x + forward.x * distance / meters, eye.y + forward.y * distance / meters);
-        let center = Projection::unproject(&world, 1.0 / TILE_SIZE_D, WrapMode::Unwrapped).ok()?;
+        let center = mapping.unproject(&world, 1.0 / TILE_SIZE_D, WrapMode::Unwrapped).ok()?;
         // Wrapped, as move_lat_lng leaves it, unless bounds keep it in their
         // range.
-        let center = if self.limits.bounds == LatLngBounds::default() { center.wrapped() } else { center };
+        let center = if self.limits.bounds == LatLngBounds::default() { mapping.wrap(center) } else { center };
         let zoom = scale_zoom(view.camera_to_center_distance() * meters / distance / TILE_SIZE_D);
         Some((center, eye.z + forward.z * distance, zoom))
     }
@@ -989,8 +995,8 @@ impl TransformState {
         let center = VerticalPerspectiveProjection::surface_vector(&view.center(WrapMode::Unwrapped))
             * radius(view.center_altitude());
         let forward = (center - eye).normalize();
-        let target =
-            VerticalPerspectiveProjection::surface_vector(&hit.location(WrapMode::Unwrapped)) * radius(hit.height);
+        let target = VerticalPerspectiveProjection::surface_vector(&hit.location(view.world(), WrapMode::Unwrapped))
+            * radius(hit.height);
         let distance = (target - eye).dot(forward);
         if !(distance.is_finite() && distance > 0.0) {
             return None;
