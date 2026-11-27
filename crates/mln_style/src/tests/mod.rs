@@ -19,6 +19,7 @@ mod lat_lng_property;
 mod layer_round_trip;
 mod layout_difference;
 mod m1_render_test_styles;
+mod members;
 mod position;
 mod properties;
 mod property_expression;
