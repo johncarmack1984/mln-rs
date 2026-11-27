@@ -203,7 +203,14 @@ pub(crate) fn map_settings(
     mode: crate::map::MapMode,
     file_source: Option<std::sync::Arc<dyn crate::storage::FileSource>>,
 ) -> crate::source::MapSettings {
-    crate::source::MapSettings { mode, pixel_ratio: 1.0, max_zoom: 22.0, file_source, fast_pfor_enabled: false }
+    crate::source::MapSettings {
+        mode,
+        pixel_ratio: 1.0,
+        tile_matrix_set: None,
+        max_zoom: 22.0,
+        file_source,
+        fast_pfor_enabled: false,
+    }
 }
 
 /// Port-only: one tile of a source of its own in a store, driven as the
