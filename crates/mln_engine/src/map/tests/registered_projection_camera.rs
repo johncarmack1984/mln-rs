@@ -381,3 +381,25 @@ fn meters_per_pixel_are_the_projections() {
     // At the latitude, on the center's meridian.
     gl_js(meters, MapProjection::new(&map).meters_per_pixel_at_latitude(location.latitude()));
 }
+
+/// GL JS's "setProjection accepts the registered name"
+/// (`src/ui/map_tests/map_projection.test.ts`), from Rust: a style edit
+/// sets the registered projection by its name, as it sets a built-in one,
+/// and the map draws in it, its center where it was.
+#[test]
+fn a_registered_projection_set_from_rust_draws_the_map_in_it() {
+    let run_loop = Queue::<()>::new();
+    let mut map = map(512, vec![crs::north_polar_stereographic("test:polar")], &run_loop);
+    map.load_style_json(&style("mercator", [45.0, 70.0], 3.0));
+    assert!(map.transform_state().view().world().wraps());
+
+    let mut projection = mln_style::projection::Projection::new();
+    projection.set_registered_name("test:polar").unwrap();
+    map.edit_style(|style| style.apply(mln_style::Edit::SetProjection(projection))).unwrap();
+
+    let view = map.transform_state().view();
+    assert_eq!("test:polar", view.world().name());
+    assert_eq!(Some("test:polar"), map.style().get_projection().registered_name());
+    assert_near(70.0, view.center(WrapMode::Unwrapped).latitude(), 1e-9);
+    assert_near(45.0, view.center(WrapMode::Unwrapped).longitude(), 1e-9);
+}

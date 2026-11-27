@@ -95,6 +95,23 @@ impl Projection {
         self.registered_name.as_deref()
     }
 
+    /// Sets `type` to the plain name of a registered projection, which the
+    /// map looks up in its registry, as a style's `projection` names one and
+    /// as GL JS's `map.setProjection({type: name})` sets it. Fails with
+    /// [`ErrorKind::InvalidArgument`](crate::error::ErrorKind) for a name
+    /// that can't name one: one that isn't `identity` and has no colon, as a
+    /// built-in projection's.
+    pub fn set_registered_name(&mut self, name: &str) -> Result<(), crate::error::Error> {
+        if !is_registered_projection_name(name) {
+            return Err(crate::error::Error::invalid_argument(format!(
+                "\"{name}\" doesn't name a registered projection: that is identity or a name with a colon"
+            )));
+        }
+        self.type_ = PropertyValue::Undefined;
+        self.registered_name = Some(name.to_owned());
+        Ok(())
+    }
+
     /// How finely tiles are subdivided for this projection, for the life of
     /// the style: anything that can render a globe at some zoom gets the
     /// globe granularity, so the Mercator hand-off at high zoom reuses the

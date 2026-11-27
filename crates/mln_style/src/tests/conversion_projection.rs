@@ -1,9 +1,10 @@
 use super::assert_near;
 use super::util::parse_json;
 use crate::conversion::{Convertible, Error};
+use crate::error::ErrorKind;
 use crate::expression::Functions;
 use crate::feature::Value;
-use crate::projection::convert_projection;
+use crate::projection::{Projection, convert_projection};
 use crate::property::table::Kind;
 use crate::property::value::{PropertyValue, StyleValue as _};
 use crate::subdivision_granularity::SubdivisionGranularitySetting;
@@ -226,4 +227,28 @@ fn projection_subdivision_granularity() {
         SubdivisionGranularitySetting::globe(),
         granularity(r#"{"type":["interpolate",["linear"],["zoom"],10,"vertical-perspective",12,"mercator"]}"#)
     );
+}
+
+/// GL JS's `map.setProjection({type: name})` for a registered projection:
+/// the name alone, without a built-in definition, which evaluates flat.
+#[test]
+fn a_registered_projection_is_set_by_its_name() {
+    let mut projection = Projection::new();
+    projection.set_registered_name("EPSG:3413").unwrap();
+    assert_eq!(Some("EPSG:3413"), projection.registered_name());
+    assert!(projection.get_type().is_undefined());
+    assert_eq!(definition("mercator"), projection.evaluate(5.0));
+
+    // A built-in projection's name, or another name without a colon, names
+    // no registered projection, and changes nothing.
+    for name in ["globe", "orthographic"] {
+        let kind = projection.set_registered_name(name).err().map(|error| error.kind);
+        assert_eq!(Some(ErrorKind::InvalidArgument), kind, "{name}");
+    }
+    assert_eq!(Some("EPSG:3413"), projection.registered_name());
+    projection.set_registered_name("identity").unwrap();
+    assert_eq!(Some("identity"), projection.registered_name());
+
+    projection.set_type(PropertyValue::Constant(definition("globe")));
+    assert_eq!(None, projection.registered_name());
 }
