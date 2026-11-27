@@ -45,9 +45,10 @@ pub(crate) struct CustomGeometrySourceOptions {
     /// The host's functions that give the tiles' GeoJSON.
     pub(crate) tile_functions: Arc<TileFunctions<GeoJson>>,
     /// The registered projection that the source's style is drawn in, whose
-    /// world square the host's GeoJSON is cut into tiles in; `None` in the
-    /// built-in projections, which cut it in lng/lat. The style sets it when
-    /// the source joins it and when its projection changes.
+    /// world square the host's GeoJSON is cut into tiles in and the regions
+    /// it invalidates lie in; `None` in the built-in projections, which cut it
+    /// in lng/lat. The style sets it when the source joins it and when its
+    /// projection changes.
     pub(crate) crs: Option<Arc<CrsMapping>>,
 }
 
