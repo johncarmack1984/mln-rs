@@ -1102,8 +1102,17 @@ impl View {
         if self.params.world.wraps() || self.is_globe() {
             return true;
         }
-        let world = self.mercator_screen_coordinate_to_tile_coordinate(point, 0, height).p;
-        self.params.world.has_lat_lng(&world)
+        self.params.world.has_lat_lng(&self.screen_coordinate_to_world_at(point, height))
+    }
+
+    /// The place in the world square where the line of sight through
+    /// `point`, measured from the bottom edge (y up), meets the plane
+    /// `height` meters above sea level on the flat map, where
+    /// [`screen_coordinate_to_lat_lng_at`](Self::screen_coordinate_to_lat_lng_at)
+    /// finds its location.
+    #[must_use]
+    pub fn screen_coordinate_to_world_at(&self, point: &ScreenCoordinate, height: f64) -> Point<f64> {
+        self.mercator_screen_coordinate_to_tile_coordinate(point, 0, height).p
     }
 
     /// The line of sight through `point`, measured from the bottom edge (y

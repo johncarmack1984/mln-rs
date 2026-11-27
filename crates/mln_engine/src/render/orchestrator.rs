@@ -1455,6 +1455,7 @@ impl RenderOrchestrator {
                 global_state: self.global_state.as_deref(),
                 tile_id: &query_data.tile_id,
                 feature_state: self.tile_store.source(query_data.source).map(|source| &source.info.feature_state),
+                world: self.view.world(),
             };
             let bucket_symbols =
                 feature_index.lookup_symbol_features(&symbol_features, &selection, &query_data.feature_sort_order)?;
@@ -1614,7 +1615,7 @@ impl RenderOrchestrator {
             return Ok(Vec::new());
         };
 
-        source.query_source_features(options, self.global_state.as_deref())
+        source.query_source_features(options, self.global_state.as_deref(), self.view.world())
     }
 
     /// Queries a feature extension of the source `source_id`; a null value

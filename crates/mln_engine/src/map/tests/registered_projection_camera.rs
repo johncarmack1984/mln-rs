@@ -8,6 +8,7 @@ use mln_style::size::Size;
 use crate::camera::{CameraOptions, MapProjection};
 use crate::exec::queue::Queue;
 use crate::geo::ScreenCoordinate;
+use crate::geo::world::WorldMapping;
 use crate::map::{Map, MapOptions};
 use crate::storage::stub_file_source::{ResponseType, StubFileSource};
 use crate::tests::{crs, registry_builder};
@@ -100,4 +101,73 @@ fn a_view_whose_center_the_projection_has_no_place_for_is_refused() {
 
     let error = MapProjection::from_view(&view, &crs::mapping(northern)).err().map(|error| error.kind);
     assert_eq!(Some(ErrorKind::InvalidArgument), error);
+}
+
+/// A feature of tile `z/x/y` of type `type_`, whose rings are `rings` in
+/// tile coordinates.
+struct TileFeature {
+    type_: mln_style::feature::FeatureType,
+    rings: mln_style::feature::GeometryCollection,
+}
+
+impl mln_style::feature::GeometryTileFeature for TileFeature {
+    fn get_type(&self) -> mln_style::feature::FeatureType {
+        self.type_
+    }
+
+    fn get_value(&self, _key: &str) -> Option<mln_style::feature::Value> {
+        None
+    }
+
+    fn get_geometries(
+        &self,
+    ) -> Result<std::borrow::Cow<'_, mln_style::feature::GeometryCollection>, mln_style::error::Error> {
+        Ok(std::borrow::Cow::Borrowed(&self.rings))
+    }
+}
+
+fn tile_feature(type_: mln_style::feature::FeatureType, rings: &[&[(i16, i16)]]) -> TileFeature {
+    let rings = rings.iter().map(|ring| ring.iter().map(|&(x, y)| geometry::Point::new(x, y)).collect::<Vec<_>>());
+    TileFeature { type_, rings: mln_style::feature::GeometryCollection::from(rings.collect::<Vec<_>>()) }
+}
+
+/// GL JS's "query returns geometry through the transform projection"
+/// (`src/data/feature_index.test.ts`): the top left of tile 2/1/2 is a
+/// quarter of the way across the identity's square and halfway down, at
+/// 45° W on the equator; Web Mercator puts it at 90° W.
+#[test]
+fn a_queried_feature_has_the_location_the_identity_gives_its_tile_coordinates() {
+    use mln_style::feature::{FeatureType, GeometryTileFeature};
+
+    let tile = mln_style::tile_id::CanonicalTileID::new(2, 1, 2);
+    let point = tile_feature(FeatureType::Point, &[&[(0, 0)]]);
+    let converted =
+        crate::tile::convert_feature(&point, &point.get_geometries().unwrap(), &tile, &crs::identity()).unwrap();
+    assert_eq!(Some(geo_types::Geometry::Point(geo_types::Point::new(-45.0, 0.0))), converted.geometry);
+    let mercator =
+        crate::tile::convert_feature(&point, &point.get_geometries().unwrap(), &tile, &WorldMapping::Mercator).unwrap();
+    let Some(geo_types::Geometry::Point(mercator)) = mercator.geometry else { panic!("a point: {mercator:?}") };
+    assert_eq!(-90.0, mercator.x());
+    assert_near(0.0, mercator.y(), 1e-12);
+
+    // A square with a square hole, its rings in order, each corner where the
+    // identity puts it: a tile's 8192 units are 45 degrees at zoom 2.
+    let square = &[(0, 0), (8192, 0), (8192, 8192), (0, 8192), (0, 0)][..];
+    let hole = &[(2048, 2048), (2048, 6144), (6144, 6144), (6144, 2048), (2048, 2048)][..];
+    let polygon = tile_feature(FeatureType::Polygon, &[square, hole]);
+    let converted =
+        crate::tile::convert_feature(&polygon, &polygon.get_geometries().unwrap(), &tile, &crs::identity()).unwrap();
+    let Some(geo_types::Geometry::Polygon(converted)) = converted.geometry else {
+        panic!("a polygon: {converted:?}");
+    };
+    let lng_lats =
+        |ring: &geo_types::LineString<f64>| ring.0.iter().map(|coord| (coord.x, coord.y)).collect::<Vec<_>>();
+    assert_eq!(
+        vec![(-45.0, 0.0), (0.0, 0.0), (0.0, -45.0), (-45.0, -45.0), (-45.0, 0.0)],
+        lng_lats(converted.exterior())
+    );
+    assert_eq!(
+        vec![(-33.75, -11.25), (-33.75, -33.75), (-11.25, -33.75), (-11.25, -11.25), (-33.75, -11.25)],
+        lng_lats(&converted.interiors()[0])
+    );
 }

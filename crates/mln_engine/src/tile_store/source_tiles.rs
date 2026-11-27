@@ -1411,15 +1411,18 @@ impl SourceTiles {
         Ok(result)
     }
 
+    /// The features of the source's tiles that `options` select, in
+    /// longitude/latitude as `world`, the map's mapping, gives them.
     pub(crate) fn query_source_features(
         &self,
         options: &crate::query::SourceQueryOptions,
         global_state: Option<&mln_style::expression::GlobalStateMap>,
+        world: &WorldMapping,
     ) -> Result<Vec<crate::tile::feature::Feature>, mln_style::error::Error> {
         let mut result = Vec::new();
         for tile in self.cover() {
             if let Some(contents) = tile.contents().and_then(Contents::geometry) {
-                contents.query_source_features(&tile.id, &mut result, options, global_state)?;
+                contents.query_source_features(&tile.id, &mut result, options, global_state, world)?;
             }
         }
         Ok(result)
