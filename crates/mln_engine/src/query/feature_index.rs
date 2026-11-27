@@ -59,7 +59,7 @@ pub(crate) struct QueryGround<'a> {
 /// Where a query looks in a tile: its geometry in tile units, seen through
 /// the camera.
 #[derive(Clone, Copy)]
-pub(crate) struct QueryRegion<'a> {
+pub struct QueryRegion<'a> {
     pub(crate) geometry: &'a GeometryCoordinates,
     /// The screen points of `geometry`, from the view's top left: where the
     /// query's lines of sight start.
@@ -449,13 +449,12 @@ impl FeatureIndex {
                 continue;
             };
 
-            let needs_cross_tile_index = render_layer.base().style.info().cross_tile_index;
+            let needs_cross_tile_index = render_layer.base().evaluated_properties.entry().places();
             // we use the float camera zoom here, not the integer tile ID zoom,
             // because for the query we take into account the actual rendered
             // size of the geometry (#2781)
             let intersects = needs_cross_tile_index
-                || region
-                    .is_some_and(|region| render_layer.query_intersects_feature(region, &feature, &geometry, &state));
+                || region.is_some_and(|region| render_layer.hit(region, &feature, &geometry, &state));
             if !intersects {
                 continue;
             }
