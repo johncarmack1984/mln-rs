@@ -161,16 +161,6 @@ impl<'a> RasterTile<'a> {
         }
     }
 
-    /// The number of times the parts of the tile it draws changed: its
-    /// mask's changes, or its mesh's.
-    #[must_use]
-    pub(crate) fn generation(self) -> u64 {
-        match self {
-            RasterTile::Tile(raster) => raster.masking.generation(),
-            RasterTile::Image(image) => image.generation(),
-        }
-    }
-
     /// Where a draw puts the vertices of the tile's geometry: on the tile
     /// itself, or on an image source's quad. Every tile of a source draws on
     /// the same quad.
@@ -194,6 +184,7 @@ pub(crate) mod input {
         ViewPlace,
     };
     use crate::layer::bucket::{ErasedBucket, Stored};
+    use crate::layer::layer_drawing::MadeFrom;
     use crate::layer::layer_type::{self, ErasedEvaluatedLayer, ErasedLayout, LayerType};
     use crate::layer::layout::{Layout, LayoutParameters, SourceLayer};
     use crate::render::pass::RenderPass;
@@ -250,6 +241,12 @@ pub(crate) mod input {
         /// What `content` holds at `place`, where [`find`](Self::find)
         /// found what it holds for a layer in the same content.
         fn at(content: TileContent<'_>, place: ViewPlace) -> Option<<Self as TileInput<T>>::Data<'_>>
+        where
+            Self: TileInput<T>;
+
+        /// What a layer's value of a tile that holds `data` is made from:
+        /// [`TileContent::stamp`] of where the tile holds it.
+        fn made_from(data: <Self as TileInput<T>>::Data<'_>) -> MadeFrom
         where
             Self: TileInput<T>;
 
@@ -311,6 +308,10 @@ pub(crate) mod input {
             LayerBucket::laid(contents.geometry()?, index)
         }
 
+        fn made_from(data: <Self as TileInput<T>>::Data<'_>) -> MadeFrom {
+            (data.id, [0, 0])
+        }
+
         fn is_for(data: <Self as TileInput<T>>::Data<'_>, layer_id: &str) -> bool {
             data.layer.style.id == layer_id
         }
@@ -338,6 +339,13 @@ pub(crate) mod input {
                 TileContent::Tile(_) => None,
             }
         }
+
+        fn made_from(data: <Self as TileInput<T>>::Data<'_>) -> MadeFrom {
+            match data {
+                RasterTile::Tile(raster) => raster.stamp(),
+                RasterTile::Image(image) => image.stamp(),
+            }
+        }
     }
 
     impl<T: LayerType> Find<T> for DemTiles {
@@ -357,6 +365,10 @@ pub(crate) mod input {
                 _ => None,
             }
         }
+
+        fn made_from(data: <Self as TileInput<T>>::Data<'_>) -> MadeFrom {
+            data.stamp()
+        }
     }
 
     impl<T: LayerType> Find<T> for NoTiles {
@@ -371,6 +383,10 @@ pub(crate) mod input {
 
         fn at(_content: TileContent<'_>, _place: ViewPlace) -> Option<<Self as TileInput<T>>::Data<'_>> {
             None
+        }
+
+        fn made_from(data: <Self as TileInput<T>>::Data<'_>) -> MadeFrom {
+            match data {}
         }
     }
 }

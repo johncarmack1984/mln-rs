@@ -13,6 +13,7 @@ use mln_style::types::TranslateAnchorType;
 
 use crate::camera::{ProjectionData, View};
 use crate::draw::identity::SimpleIdentity;
+use crate::layer::layer_drawing::MadeFrom;
 use crate::layer::layer_type::LayerType;
 use crate::layer::tile_input::TileData;
 use crate::layer::tile_input::input::Find;
@@ -114,7 +115,7 @@ impl TileContent<'_> {
     pub(crate) fn stamp(self, place: ViewPlace) -> Option<(SimpleIdentity, [u64; 2])> {
         match (self, place) {
             (TileContent::Tile(contents), place) => contents.stamp(place),
-            (TileContent::Image(image), ViewPlace::Own) => Some((image.id(), [image.generation(), 0])),
+            (TileContent::Image(image), ViewPlace::Own) => Some(image.stamp()),
             (TileContent::Image(_), ViewPlace::Laid(_)) => None,
         }
     }
@@ -242,6 +243,12 @@ impl<'a, T: LayerType> FrameTile<'a, T> {
     #[must_use]
     pub(crate) fn in_copy(self, wrap: i16) -> Self {
         FrameTile { wrap, ..self }
+    }
+
+    /// What the layer's value of the tile is made from, if the tile holds
+    /// anything for the layer ([`TileContent::stamp`]).
+    pub(crate) fn made_from(self) -> Option<MadeFrom> {
+        self.data.map(T::Input::made_from)
     }
 
     /// What the tile holds for the layer, if anything.
