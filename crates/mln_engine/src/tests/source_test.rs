@@ -1611,9 +1611,14 @@ fn image_view(width: u32, zoom: f64, lng: f64) -> SourceTest {
 /// An image source with an image, from `west` to `east` and from 10° north
 /// to 10° south, updated for `test`'s view.
 fn image_seen_by(test: &SourceTest, west: f64, east: f64) -> crate::source::render_image_source::RenderImageSource {
+    image_on(test, [[west, 10.0], [east, 10.0], [east, -10.0], [west, -10.0]])
+}
+
+/// An image source with an image on `corners`, `[lng, lat]` from the top
+/// left clockwise, updated for `test`'s view.
+fn image_on(test: &SourceTest, corners: [[f64; 2]; 4]) -> crate::source::render_image_source::RenderImageSource {
     use mln_style::sources::image_source;
-    let corners =
-        [(10.0, west), (10.0, east), (-10.0, east), (-10.0, west)].map(|(lat, lng)| LatLng::new(lat, lng).unwrap());
+    let corners = corners.map(|[lng, lat]| LatLng::new(lat, lng).unwrap());
     let image = mln_style::bitmap::PremultipliedImage::from_vec(Size::new(1, 1), vec![255, 0, 0, 255]);
     let source = edited(&image_source("image", corners), set_image("image", image));
     let mut store = test.store();
@@ -1677,6 +1682,82 @@ fn an_image_far_west_draws_in_the_views_world() {
     let worlds = 32768.0 * 360.0;
     let wraps = image_copies(&test, 10.0 - worlds, 20.0 - worlds);
     assert!(wraps.contains(&0), "{wraps:?}");
+}
+
+/// A view of zoom 0 in `world`, centered at lng/lat 0, 0.
+fn view_in(world: crate::geo::world::WorldMapping) -> SourceTest {
+    let mut test = SourceTest::new();
+    test.transform.set_world(world);
+    test.transform.jump_to(&CameraOptions { center: Some(LatLng::default()), zoom: Some(0.0), ..Default::default() });
+    test
+}
+
+/// Where the corners of `render_source`'s image land in the world square,
+/// from the top left clockwise, and how far a corner's rounding to its
+/// tile's units can move it.
+fn image_corners_in_world(
+    test: &SourceTest,
+    render_source: &crate::source::render_image_source::RenderImageSource,
+) -> ([[f64; 2]; 4], f64) {
+    let tile = render_source.render_tiles().first().expect("a tile the image draws in").id;
+    let store = test.store();
+    let mut contents = Vec::new();
+    render_source.tile_contents(&store, &mut contents);
+    let Some(Some(crate::render::tile::TileContent::Image(image))) = contents.first() else {
+        panic!("an image source's tile");
+    };
+    let tiles = 2.0f64.powi(i32::from(tile.canonical.z));
+    let extent = f64::from(mln_style::constants::EXTENT);
+    let place = |x: f32, y: f32| {
+        [
+            (f64::from(tile.wrap) * tiles + f64::from(tile.canonical.x) + f64::from(x) / extent) / tiles,
+            (f64::from(tile.canonical.y) + f64::from(y) / extent) / tiles,
+        ]
+    };
+    let [top_left_x, top_left_y, top_right_x, top_right_y] = image.quad.coords_top;
+    let [bottom_left_x, bottom_left_y, bottom_right_x, bottom_right_y] = image.quad.coords_bottom;
+    let corners = [
+        place(top_left_x, top_left_y),
+        place(top_right_x, top_right_y),
+        place(bottom_right_x, bottom_right_y),
+        place(bottom_left_x, bottom_left_y),
+    ];
+    (corners, 0.5 / (extent * tiles))
+}
+
+// GL JS: ImageSource corner placement places the corners with mercator on a
+// mercator map, and with the map projection on a planar map.
+/// An image's corners land where the map's projection puts them: lat 60 to
+/// 30 is a sixth to a third of the way down the identity's world square,
+/// and 0.29 to 0.41 of the way down Mercator's.
+#[test]
+fn an_images_corners_land_where_the_maps_projection_puts_them() {
+    let corners = [[0.0, 60.0], [45.0, 60.0], [45.0, 30.0], [0.0, 30.0]];
+    let mercator = crate::geo::world::WorldMapping::Mercator;
+    let in_mercator =
+        corners.map(|[lng, lat]| mercator.world_from_lat_lng(&LatLng::new(lat, lng).unwrap())).map(|p| [p.x, p.y]);
+    let in_identity = [[0.5, 1.0 / 6.0], [0.75, 1.0 / 6.0], [0.75, 1.0 / 3.0], [0.5, 1.0 / 3.0]];
+    for (world, expected) in [(mercator.clone(), in_mercator), (crate::tests::crs::identity(), in_identity)] {
+        let test = view_in(world.clone());
+        let (placed, tolerance) = image_corners_in_world(&test, &image_on(&test, corners));
+        for (place, expected) in placed.iter().zip(expected) {
+            for axis in 0..2 {
+                let error = (place[axis] - expected[axis]).abs();
+                assert!(error <= tolerance, "{}: {place:?} isn't {expected:?}", world.name());
+            }
+        }
+    }
+}
+
+/// An image outside a registered projection's world square draws nowhere.
+#[test]
+fn an_image_outside_a_registered_projections_square_draws_nowhere() {
+    // The identity's square spans lng -90 to 90.
+    let test = view_in(crate::tests::crs::identity());
+    let outside = image_on(&test, [[100.0, 10.0], [120.0, 10.0], [120.0, -10.0], [100.0, -10.0]]);
+    assert!(outside.render_tiles().is_empty());
+    let inside = image_on(&test, [[60.0, 10.0], [80.0, 10.0], [80.0, -10.0], [60.0, -10.0]]);
+    assert_eq!(inside.render_tiles().len(), 1);
 }
 
 /// An image source that draws nowhere holds no frame back: the style tracks
