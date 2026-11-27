@@ -2976,8 +2976,10 @@ pub struct mln_canonical_tile_id {
 }
 /** Asks for the data of a tile in a custom source.
 
- `map` and `source_id` name the source that asks. Return quickly. Once the
- data is ready, pass it to mln_map_set_custom_geometry_source_tile_data() or
+ `map` and `source_id` name the source that asks, and
+ mln_map_get_custom_source_tile_bounds() reads the coordinates that the tile
+ spans. Return quickly. Once the data is ready, pass it to
+ mln_map_set_custom_geometry_source_tile_data() or
  mln_map_set_custom_vector_source_tile_data(). If it fails to load, report
  that with mln_map_set_custom_geometry_source_tile_error() or
  mln_map_set_custom_vector_source_tile_error().
