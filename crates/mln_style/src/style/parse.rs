@@ -313,6 +313,8 @@ impl Parser {
             return;
         };
 
+        // The style's projection, which `parse` reads before its sources.
+        let crs = self.projection.registered_name().and_then(|name| self.registry.projection(name)).cloned();
         for (id, property) in members(object) {
             let mut error = Error::default();
             let Some(source) = convert_source(&Convertible::from(property), &mut error, id, &self.registry) else {
@@ -320,7 +322,7 @@ impl Parser {
                 continue;
             };
 
-            self.sources.push(source);
+            self.sources.push(source.in_projection(crs.as_ref()).unwrap_or(source));
         }
     }
 

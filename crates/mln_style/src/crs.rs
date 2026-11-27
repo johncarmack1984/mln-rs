@@ -5,6 +5,7 @@
 mod mapping;
 
 use std::fmt;
+use std::sync::Arc;
 
 pub use mapping::{BoxSamples, CrsMapping, WorldBox};
 
@@ -63,6 +64,17 @@ impl Crs {
             converter: Box::new(Identity),
             tile_matrix_set: TileMatrixSet { origin: [-90.0, 90.0], extent_at_zoom0: 180.0 },
         }
+    }
+}
+
+/// Whether `a` and `b` are the same registered projection's mapping, or
+/// both `None`, as for the built-in projections.
+#[must_use]
+pub fn same_mapping(a: Option<&Arc<CrsMapping>>, b: Option<&Arc<CrsMapping>>) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+        _ => false,
     }
 }
 

@@ -47,6 +47,8 @@ mod placement_test;
 mod pixel_ratio_test;
 // The textures that raster, hillshade and color-relief layers keep of their tiles.
 mod raster_textures_test;
+// GeoJSON sources tiled again when the style's registered projection changes.
+mod registered_projection_geojson_test;
 // Feature queries on a map in a registered projection.
 mod registered_projection_query_test;
 // A map in a registered projection drawn in tile mode.

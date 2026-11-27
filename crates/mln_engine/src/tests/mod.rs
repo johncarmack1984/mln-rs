@@ -28,6 +28,8 @@ mod tile_cover_test;
 // test/tile/geojson_tile.test.cpp and the GeoJSON parts of
 // test/style/source.test.cpp: need the camera's transform.
 mod geojson_tile_test;
+// test/util/geojson_reproject.test.cpp: GeoJSON in a registered projection.
+mod geojson_crs_test;
 mod source_test;
 // The terrain's drapes: their projection, their stencil, the tiles a drape
 // draws, what draws one again, and their byte cap.
