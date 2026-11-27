@@ -578,6 +578,41 @@ fn tile_requests_follow_the_view() {
     assert!(back[first.len()..].iter().all(|order| *order == UNWANTED));
 }
 
+// GL JS: VectorTileSource builds tile bounds with the map projection.
+/// A source's bounds pick its tiles in the grid of the projection the map
+/// draws in.
+#[test]
+fn bounds_pick_tiles_in_the_grid_of_the_maps_projection() {
+    // Lng 0 to 45 and lat 45 to 80: at zoom 3, rows 0 and 1 of the identity's
+    // grid, whose row 2 starts at lat 45, and rows 1 and 2 of Mercator's.
+    let bounds = mln_style::geo::LatLngBounds::hull(LatLng::new(45.0, 0.0).unwrap(), LatLng::new(80.0, 45.0).unwrap());
+    // The tiles requested for a view of zoom 3 at lat 45 in `world`, which
+    // shows columns 4 and 5 of rows 1 and 2 in the identity, and of rows 2
+    // and 3 in Mercator.
+    let requested_in = |world: crate::geo::world::WorldMapping| {
+        let mut test = SourceTest::new();
+        test.transform.set_world(world);
+        let center = LatLng::new(45.0, 22.5).unwrap();
+        test.transform.jump_to(&CameraOptions { center: Some(center), zoom: Some(3.0), ..Default::default() });
+        let file_source = Arc::new(PendingTileSource::default());
+        let requested = Arc::clone(&file_source.requested);
+        let layers = Tiled::Vector.layers();
+        let tileset = PartialTileset { bounds: Some(bounds), ..tiles_tileset() };
+        let source = crate::tests::ready(Tiled::Vector.source(None, tileset));
+        let mut store = test.store();
+        let mut render_source = crate::tests::create_render_source(&source, &mut store);
+        let parameters = test.tile_parameters_with(MapMode::Continuous, Some(file_source));
+        render_source.update(&mut store, source.clone(), &layers, true, true, &parameters);
+        requested.lock().clone()
+    };
+
+    let identity = requested_in(crate::tests::crs::identity());
+    assert!(identity.contains(&(3, 4, 1)), "{identity:?}");
+    assert!(!identity.contains(&(3, 4, 2)), "{identity:?}");
+    let mercator = requested_in(crate::geo::world::WorldMapping::Mercator);
+    assert!(mercator.contains(&(3, 4, 2)), "{mercator:?}");
+}
+
 // gtest: Source.RasterTileEmpty
 #[test]
 fn raster_tile_empty() {
