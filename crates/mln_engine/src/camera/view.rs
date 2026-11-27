@@ -69,6 +69,25 @@ pub(crate) fn map_offset(center: &LatLng, scale: f64, globe: bool) -> (f64, f64)
     (x, y)
 }
 
+/// How many pixels apart the places are whose ground distance gives a
+/// registered projection's meters per pixel: GL JS's geolocate control's
+/// default width.
+const SCALE_SPAN_PX: f64 = 100.0;
+
+/// The earth's mean radius in meters, GL JS's `earthRadius`, on which its
+/// `LngLat.distanceTo` measures.
+const MEAN_EARTH_RADIUS_M: f64 = 6_371_008.8;
+
+/// The ground distance in meters between two lng/lats in degrees, GL JS's
+/// `LngLat.distanceTo`: the spherical law of cosines on the earth's mean
+/// radius.
+fn ground_distance([lng_a, lat_a]: [f64; 2], [lng_b, lat_b]: [f64; 2]) -> f64 {
+    let (lat_a, lat_b) = (lat_a.to_radians(), lat_b.to_radians());
+    let cos = lat_a.sin() * lat_b.sin() + lat_a.cos() * lat_b.cos() * (lng_b - lng_a).to_radians().cos();
+    // `Math.min`, which keeps a NaN.
+    MEAN_EARTH_RADIUS_M * (if cos > 1.0 { 1.0 } else { cos }).acos()
+}
+
 /// The fractional part of `x`, with the sign of `x`.
 fn modf_fraction(x: f64) -> f64 {
     if x.is_infinite() {
@@ -368,6 +387,33 @@ impl View {
                     / Projection::world_size(self.params.scale)
             }
         }
+    }
+
+    /// How many meters a pixel spans at `lat_lng`, at the zoom, whatever the
+    /// pitch and bearing: Web Mercator's scale at its latitude, also on the
+    /// globe, or in a registered projection the ground distance from
+    /// `lat_lng` to the place 100 pixels from it along the projection's x
+    /// axis, over 100, as GL JS's geolocate control measures it. NaN where
+    /// the projection has no place there.
+    #[must_use]
+    pub fn meters_per_pixel_at(&self, lat_lng: &LatLng) -> f64 {
+        self.meters_per_pixel_at_lng_lat([lat_lng.longitude(), lat_lng.latitude()])
+    }
+
+    /// [`meters_per_pixel_at`](Self::meters_per_pixel_at) a lng/lat in
+    /// degrees.
+    pub(crate) fn meters_per_pixel_at_lng_lat(&self, lng_lat: [f64; 2]) -> f64 {
+        let world = &self.params.world;
+        if world.wraps() {
+            return Projection::meters_per_pixel_at_latitude(lng_lat[1], self.zoom());
+        }
+        let mut place = [[0.0; 2]];
+        world.world_from_lng_lats(&[lng_lat], &mut place);
+        let [x, y] = place[0];
+        let span = SCALE_SPAN_PX / Projection::world_size(self.params.scale);
+        let mut end = [[0.0; 2]];
+        world.lng_lats_from_world(&[[x + span, y]], &mut end);
+        ground_distance(lng_lat, end[0]) / SCALE_SPAN_PX
     }
 
     /// The center's altitude in pixels at the zoom.
