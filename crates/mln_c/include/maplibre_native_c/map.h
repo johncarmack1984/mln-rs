@@ -294,12 +294,6 @@ typedef struct mln_edge_insets {
   double right;
 } mln_edge_insets;
 
-/** A geographic coordinate, in degrees. */
-typedef struct mln_lat_lng {
-  double latitude;
-  double longitude;
-} mln_lat_lng;
-
 /** A camera, with only the members that `fields` selects. */
 typedef struct mln_camera_options {
   uint32_t size;

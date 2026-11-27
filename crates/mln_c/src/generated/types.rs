@@ -416,6 +416,107 @@ pub const MLN_RESOURCE_ERROR_REASON_CONNECTION: mln_resource_error_reason = 3;
 pub const MLN_RESOURCE_ERROR_REASON_RATE_LIMIT: mln_resource_error_reason = 4;
 /// Why a resource request failed.
 pub type mln_resource_error_reason = u32;
+/// A geographic coordinate, in degrees.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct mln_lat_lng {
+    pub latitude: f64,
+    pub longitude: f64,
+}
+/// A point in the plane of a registered projection, in its units.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct mln_projected_point {
+    pub x: f64,
+    /// Grows toward the top of the map.
+    pub y: f64,
+}
+/** The square tile grid over the plane of a registered projection.
+
+ Tile 0/0/0 is the square of side `extent_at_zoom0` whose top-left corner is
+ `origin`, and each zoom level splits every tile into four, as in a quad tree
+ tile matrix set of the OGC Two Dimensional Tile Matrix Set standard.*/
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct mln_tile_matrix_set {
+    /// The top-left corner of tile 0/0/0: its least x and its greatest y.
+    pub origin: mln_projected_point,
+    /// The side of tile 0/0/0, in the projection's units.
+    pub extent_at_zoom0: f64,
+}
+/** Converts coordinates to points of a registered projection.
+
+ Write the point of each of `coordinates` at the same index of `out_points`,
+ or NaN as both of its members where the coordinate has no point. Give the
+ same answer for the same coordinate every time.
+
+ Threads:
+ Runs on library threads, several at once. It can't call the library.
+
+ Lifetimes:
+ `coordinates` and `out_points` stay valid until the callback returns.*/
+pub type mln_projection_forward_callback = ::core::option::Option<
+    unsafe extern "C" fn(
+        user_data: *mut ::core::ffi::c_void,
+        coordinates: *const mln_lat_lng,
+        coordinate_count: usize,
+        out_points: *mut mln_projected_point,
+    ),
+>;
+/** Converts points of a registered projection to coordinates.
+
+ Write the coordinate of each of `points` at the same index of
+ `out_coordinates`, or NaN as both of its members where the point has no
+ coordinate. Give the same answer for the same point every time.
+
+ Threads:
+ Runs on library threads, several at once. It can't call the library.
+
+ Lifetimes:
+ `points` and `out_coordinates` stay valid until the callback returns.*/
+pub type mln_projection_inverse_callback = ::core::option::Option<
+    unsafe extern "C" fn(
+        user_data: *mut ::core::ffi::c_void,
+        points: *const mln_projected_point,
+        point_count: usize,
+        out_coordinates: *mut mln_lat_lng,
+    ),
+>;
+/** The callbacks that convert between coordinates and the points of a
+ registered projection.
+
+ Set both.
+
+ Lifetimes:
+ The library calls `release_user_data` once the runtime, its maps, and the
+ projections that mln_map_projection_create() made from them are released.*/
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct mln_projection_converter {
+    pub forward: mln_projection_forward_callback,
+    pub inverse: mln_projection_inverse_callback,
+    pub user_data: *mut ::core::ffi::c_void,
+    pub release_user_data: mln_user_data_release,
+}
+/** A projection that a runtime's maps draw in when their style's
+ `projection.type` names it.
+
+ A style that names a projection its runtime doesn't have draws in Mercator.
+ A map in a registered projection takes every tile source of its style to be
+ cut in `tile_matrix_set`, and draws the tiles as they are. It counts the
+ projection's units as meters wherever it converts meters, as for altitudes,
+ and draws one copy of the world, across which nothing wraps.*/
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct mln_registered_projection {
+    pub size: u32,
+    /** The name that `projection.type` gives, such as `EPSG:3413`. It needs a
+ colon: names without one, such as `identity`, are kept for the built-in
+ projections.*/
+    pub name: mln_buffer_view,
+    pub tile_matrix_set: mln_tile_matrix_set,
+    pub converter: mln_projection_converter,
+}
 /// Options for mln_runtime_create().
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -428,6 +529,10 @@ pub struct mln_runtime_options {
  offline regions. Its directory must be writable. Empty keeps the cache in
  memory.*/
     pub cache_path: mln_buffer_view,
+    /** The projections, beside the built-in ones, that the styles of the
+ runtime's maps can name.*/
+    pub projections: *const mln_registered_projection,
+    pub projection_count: usize,
 }
 /// Statistics about the frames that a map renders.
 #[repr(C)]
@@ -1109,13 +1214,6 @@ pub struct mln_edge_insets {
     pub left: f64,
     pub bottom: f64,
     pub right: f64,
-}
-/// A geographic coordinate, in degrees.
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct mln_lat_lng {
-    pub latitude: f64,
-    pub longitude: f64,
 }
 /// A camera, with only the members that `fields` selects.
 #[repr(C)]
