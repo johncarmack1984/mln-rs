@@ -89,6 +89,14 @@ impl Parser {
     }
 }
 
+impl Parser {
+    /// The style's projection.
+    #[must_use]
+    pub fn projection(&self) -> &Projection {
+        &self.projection
+    }
+}
+
 fn is_number(value: &Json<'_>) -> bool {
     value.is_number()
 }

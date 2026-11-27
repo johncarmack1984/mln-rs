@@ -216,6 +216,15 @@ impl TileCover {
         Ok(TileCover { impl_: Box::new(Impl::new_projected(i32::from(z), geom)?) })
     }
 
+    /// The cover at zoom `z` of `geom` in the world square, which spans 0 to
+    /// 1 on both axes. Its tiles past the square's sides are in other world
+    /// copies.
+    #[cfg(feature = "sqlite")]
+    #[must_use]
+    pub(crate) fn new_from_world_geometry(geom: &Geometry<f64>, z: u8) -> TileCover {
+        TileCover { impl_: Box::new(Impl::new_in_world_square(i32::from(z), geom)) }
+    }
+
     #[must_use]
     pub(crate) fn has_next(&self) -> bool {
         self.impl_.has_next()
