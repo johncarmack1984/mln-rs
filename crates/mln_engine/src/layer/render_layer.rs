@@ -22,6 +22,7 @@ use crate::camera::View;
 use crate::draw::context::Context;
 use crate::draw::draws::{DrawOrder, Draws, Group, LayerFrame, LendAt, Lent};
 use crate::draw::resources::Resources;
+use crate::geo::ScreenCoordinate;
 use crate::layer::bucket::ErasedBucket;
 use crate::layer::layer_drawing::{ChangedBuckets, TileMap};
 use crate::layer::layer_type::{ErasedEvaluatedLayer, EvaluatedLayer, entry};
@@ -30,10 +31,11 @@ use crate::layer::tile_input::{TileData, TileInput};
 use crate::query::feature_index::QueryRegion;
 use crate::render::paint_parameters::PaintParameters;
 use crate::render::pass::RenderPass;
-use crate::render::terrain::SurfaceLight;
+use crate::render::terrain::{SurfaceLight, TerrainElevation, TileGround};
 use crate::render::tile::{FoundTile, FrameTile, RenderTile, TILE_BOUNDS, TileContent, TileStamp, overlaps};
 use crate::render::update_parameters::UpdateParameters;
 use crate::source::render_source::{RenderSource, TileOrder};
+use crate::tile::feature::Feature;
 use crate::tile::{OverscaledTileID, UnwrappedTileID};
 
 /// A layer's bucket in a layout, which the layers of its layout group
@@ -441,7 +443,7 @@ pub struct PrepareCx<'a, 'f, L: Layer> {
 }
 
 impl<'a, L: Layer> PrepareCx<'a, '_, L> {
-    /// The layer's values of the frame.
+    /// The layer's values of the last update.
     #[must_use]
     pub fn values(&self) -> &LayerValues<L::Style> {
         self.values
@@ -484,7 +486,7 @@ pub struct TileCx<'a, 'f, L: Layer> {
 }
 
 impl<'a, L: Layer> TileCx<'a, '_, L> {
-    /// The layer's values of the frame.
+    /// The layer's values of the last update.
     #[must_use]
     pub fn values(&self) -> &LayerValues<L::Style> {
         self.values
@@ -517,7 +519,7 @@ impl<L: Layer> UpdateCx<'_, '_, L> {
         self.parameters.source.and_then(RenderSource::max_zoom)
     }
 
-    /// The layer's values of the frame.
+    /// The layer's values of the last update.
     #[must_use]
     pub fn values(&self) -> &LayerValues<L::Style> {
         self.values
@@ -721,6 +723,54 @@ pub trait Layer: Sized + 'static {
         _feature_state: &mln_style::feature::FeatureState,
     ) -> bool {
         false
+    }
+
+    /// Adds to `hits` the features that `query`'s geometry hits of what the
+    /// layer shows other than its tiles' features, such as a mark it places
+    /// itself, topmost first. As for tiles' features, a query answers for
+    /// the last update: the engine asks a layer that the update would draw,
+    /// with its view and values, which may come before a frame draws them,
+    /// so a layer answers from `query` rather than from what it kept from
+    /// drawing. The engine names the features' layer and source and keeps
+    /// those that the query's filter takes.
+    fn hit_frame(&self, _query: &FrameQuery<'_, Self>, _hits: &mut Vec<Feature>) {}
+}
+
+/// A rendered-feature query of a layer `L`, for what it shows other than
+/// its tiles' features, as of the last update ([`Layer::hit_frame`]).
+pub struct FrameQuery<'a, L: Layer> {
+    values: &'a LayerValues<L::Style>,
+    view: &'a View,
+    geometry: &'a [ScreenCoordinate],
+    ground: Option<&'a TerrainElevation>,
+}
+
+impl<'a, L: Layer> FrameQuery<'a, L> {
+    /// The layer's values of the last update.
+    #[must_use]
+    pub fn values(&self) -> &'a LayerValues<L::Style> {
+        self.values
+    }
+
+    /// The last update's camera and projection.
+    #[must_use]
+    pub fn view(&self) -> &'a View {
+        self.view
+    }
+
+    /// The query's geometry, in the view's logical pixels from its top left:
+    /// one point, or a closed ring.
+    #[must_use]
+    pub fn geometry(&self) -> &'a [ScreenCoordinate] {
+        self.geometry
+    }
+
+    /// Over terrain, the ground the frame drew under the points of `tile`,
+    /// for a layer that meets terrain ([`Layer::TERRAIN`]); `None` without
+    /// terrain or for a layer that draws flat.
+    #[must_use]
+    pub fn ground(&self, tile: UnwrappedTileID) -> Option<TileGround<'a>> {
+        self.ground.map(|ground| TileGround::new(ground, tile))
     }
 }
 
@@ -1035,6 +1085,17 @@ pub trait RenderLayer {
         feature_state: &mln_style::feature::FeatureState,
     ) -> bool;
 
+    /// See [`Layer::hit_frame`]: what `geometry`, in `view`'s logical pixels,
+    /// hits of what the layer shows, over `ground` where the map has
+    /// terrain. Nothing for a layer the last update wouldn't draw.
+    fn hit_frame(
+        &self,
+        view: &View,
+        geometry: &[ScreenCoordinate],
+        ground: Option<&TerrainElevation>,
+        hits: &mut Vec<Feature>,
+    );
+
     /// Whether the layer draws in a pass and is visible.
     fn needs_rendering(&self) -> bool {
         self.base().passes != RenderPass::None && self.base().style.base().visibility != VisibilityType::None
@@ -1272,5 +1333,18 @@ impl<L: Layer> RenderLayer for Hosted<L> {
         feature_state: &mln_style::feature::FeatureState,
     ) -> bool {
         self.layer.hit(&self.values, region, feature, geometry, feature_state)
+    }
+
+    fn hit_frame(
+        &self,
+        view: &View,
+        geometry: &[ScreenCoordinate],
+        ground: Option<&TerrainElevation>,
+        hits: &mut Vec<Feature>,
+    ) {
+        if self.base.is_renderable {
+            let ground = ground.filter(|_| L::TERRAIN != OnTerrain::Flat);
+            self.layer.hit_frame(&FrameQuery { values: &self.values, view, geometry, ground }, hits);
+        }
     }
 }
