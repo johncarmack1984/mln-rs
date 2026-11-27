@@ -6,7 +6,7 @@ mod mapping;
 
 use std::fmt;
 
-pub use mapping::{CrsMapping, WorldBox};
+pub use mapping::{BoxSamples, CrsMapping, WorldBox};
 
 use crate::projection::IDENTITY_PROJECTION_NAME;
 

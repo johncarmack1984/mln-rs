@@ -2,13 +2,13 @@
 //! helpers see it.
 
 use mln_style::error::ErrorKind;
-use mln_style::geo::{LatLng, WrapMode};
+use mln_style::geo::{LatLng, LatLngBounds, WrapMode};
 use mln_style::size::Size;
 
-use crate::camera::{CameraOptions, MapProjection};
+use crate::camera::{BoundOptions, CameraOptions, ConstrainMode, MapProjection};
 use crate::exec::queue::Queue;
-use crate::geo::ScreenCoordinate;
 use crate::geo::world::WorldMapping;
+use crate::geo::{EdgeInsets, ScreenCoordinate};
 use crate::map::{Map, MapOptions};
 use crate::storage::stub_file_source::{ResponseType, StubFileSource};
 use crate::tests::{crs, registry_builder};
@@ -170,4 +170,166 @@ fn a_queried_feature_has_the_location_the_identity_gives_its_tile_coordinates() 
         vec![(-33.75, -11.25), (-33.75, -33.75), (-11.25, -33.75), (-11.25, -11.25), (-33.75, -11.25)],
         lng_lats(&converted.interiors()[0])
     );
+}
+
+/// GL JS's "fits the cap north of 60N with the pole at the center"
+/// (`src/ui/map_tests/map_projection.test.ts`): the cap's corners are the
+/// pole and two points on its edge, but its world box is the square around
+/// the pole.
+#[test]
+fn the_camera_for_a_polar_cap_centers_on_the_pole() {
+    let run_loop = Queue::<()>::new();
+    let mut map = map(512, vec![crs::polar_stereographic("test:polar")], &run_loop);
+    map.load_style_json(&style("test:polar", [0.0, 70.0], 2.0));
+
+    let cap = LatLngBounds::hull(ll(60.0, -180.0), ll(90.0, 180.0));
+    let camera = map.camera_for_lat_lng_bounds(&cap, &EdgeInsets::default(), None, None).unwrap();
+    assert_near(90.0, camera.center.unwrap().latitude(), 1e-6);
+
+    // The fitted camera shows the whole cap: its edge at 60° N, down the
+    // view along the projection's central meridian, is just inside the
+    // view's bottom edge, as far inside as the box grew by how far its
+    // edges curve between samples.
+    map.jump_to(&camera);
+    let edge = map.pixel_for_lat_lng(&ll(60.0, -45.0));
+    assert!(500.0 < edge.y && edge.y <= 512.0, "{edge:?}");
+}
+
+/// A converter that records how many positions each call of its `forward`
+/// takes.
+struct CountedForward {
+    converter: Box<dyn mln_style::crs::CrsConverter>,
+    calls: std::sync::Arc<parking_lot::Mutex<Vec<usize>>>,
+}
+
+impl mln_style::crs::CrsConverter for CountedForward {
+    fn forward(&self, lng_lats: &[[f64; 2]], positions: &mut [[f64; 2]]) {
+        self.calls.lock().push(lng_lats.len());
+        self.converter.forward(lng_lats, positions);
+    }
+
+    fn inverse(&self, positions: &[[f64; 2]], lng_lats: &mut [[f64; 2]]) {
+        self.converter.inverse(positions, lng_lats);
+    }
+}
+
+// gtest: Map.LatLngBoundsToCameraInAPolarProjection
+// The box is fitted by its samples, the 17 by 17 grid and the halfway
+// points of its edges, which go through the converter in one call.
+#[test]
+fn a_box_is_fitted_by_its_samples_in_one_batch() {
+    let run_loop = Queue::<()>::new();
+    let calls = std::sync::Arc::default();
+    let polar = crs::north_polar_stereographic("test:polar-fit");
+    let converter = Box::new(CountedForward { converter: polar.converter, calls: std::sync::Arc::clone(&calls) });
+    let mut map = map(512, vec![mln_style::crs::Crs { converter, ..polar }], &run_loop);
+    map.load_style_json(&style("test:polar-fit", [0.0, 70.0], 2.0));
+    calls.lock().clear();
+
+    // Its corners are the pole and one point on its edge, but the cap north
+    // of 60 N is a disc around the pole.
+    let cap = LatLngBounds::hull(ll(60.0, -180.0), ll(90.0, 180.0));
+    let camera = map.camera_for_lat_lng_bounds(&cap, &EdgeInsets::default(), None, None).unwrap();
+    assert_near(90.0, camera.center.unwrap().latitude(), 1e-6);
+    let calls = calls.lock();
+    assert!(calls.contains(&(17 * 17 + 4 * 16)), "{calls:?}");
+    assert!(calls.len() < 17 * 17, "{calls:?}");
+}
+
+/// GL JS fits a box at a bearing by its samples turned with the view: a
+/// polar cap, round about its pole, fits at the same zoom at any bearing,
+/// where the corners of its world box would stick out at 45° and fit it
+/// half a zoom level out.
+#[test]
+fn the_camera_for_a_polar_cap_fits_it_at_any_bearing() {
+    let run_loop = Queue::<()>::new();
+    let mut map = map(512, vec![crs::polar_stereographic("test:polar")], &run_loop);
+    map.load_style_json(&style("test:polar", [0.0, 70.0], 2.0));
+
+    let cap = LatLngBounds::hull(ll(60.0, -180.0), ll(90.0, 180.0));
+    let at = |bearing: f64| map.camera_for_lat_lng_bounds(&cap, &EdgeInsets::default(), Some(bearing), None).unwrap();
+    let (north_up, turned) = (at(0.0), at(45.0));
+    assert_near(north_up.zoom.unwrap(), turned.zoom.unwrap(), 1e-9);
+    assert_near(45.0, turned.bearing.unwrap(), 1e-9);
+    assert_near(90.0, turned.center.unwrap().latitude(), 1e-6);
+}
+
+/// A box of the identity is the rectangle of its corners: lng 0..90 and lat
+/// 0..90, half the square across, fill a 512-pixel view at zoom 1.
+#[test]
+fn the_camera_for_a_box_of_the_identity_fills_the_view_with_it() {
+    let run_loop = Queue::<()>::new();
+    let mut map = map(512, Vec::new(), &run_loop);
+    map.load_style_json(&style("identity", [0.0, 0.0], 0.0));
+
+    let quarter = LatLngBounds::hull(ll(0.0, 0.0), ll(90.0, 90.0));
+    let camera = map.camera_for_lat_lng_bounds(&quarter, &EdgeInsets::default(), None, None).unwrap();
+    assert_near(45.0, camera.center.unwrap().latitude(), 1e-9);
+    assert_near(45.0, camera.center.unwrap().longitude(), 1e-9);
+    assert_near(1.0, camera.zoom.unwrap(), 1e-6);
+}
+
+/// The view's corners in a registered projection: north is up at the
+/// center's meridian only, so the area's eastmost location is at the view's
+/// top-right corner, not at its bottom-right one.
+#[test]
+fn the_bounds_a_camera_shows_hold_every_corner_of_the_view() {
+    let run_loop = Queue::<()>::new();
+    let mut map = map(512, vec![crs::north_polar_stereographic("test:polar")], &run_loop);
+    map.load_style_json(&style("test:polar", [0.0, 70.0], 3.0));
+
+    let bounds = map.lat_lng_bounds_for_camera(&CameraOptions::default()).unwrap();
+    for (x, y) in [(0.0, 0.0), (512.0, 0.0), (512.0, 512.0), (0.0, 512.0)] {
+        let corner = map.lat_lng_for_pixel(&ScreenCoordinate::new(x, y), WrapMode::Unwrapped).unwrap();
+        assert!(bounds.contains(&corner), "{corner:?} isn't in {bounds:?}");
+    }
+    let top_right = map.lat_lng_for_pixel(&ScreenCoordinate::new(512.0, 0.0), WrapMode::Unwrapped).unwrap();
+    let bottom_right = map.lat_lng_for_pixel(&ScreenCoordinate::new(512.0, 512.0), WrapMode::Unwrapped).unwrap();
+    assert!(top_right.longitude() > bottom_right.longitude(), "{top_right:?} {bottom_right:?}");
+    assert_eq!(bounds, map.lat_lng_bounds_for_camera_unwrapped(&CameraOptions::default()).unwrap());
+}
+
+/// Max bounds keep the center inside them, as Mercator's do: at zoom 4 the
+/// identity's 180 degrees are 8192 pixels, and a 200-pixel view centered on
+/// the bounds' corner reaches 100 pixels past it. GL JS keeps the whole view
+/// inside them, which `ConstrainMode::Screen` does
+/// (`src/camera/mercator_camera_math.test.ts`, "keeps the viewport inside
+/// explicit max bounds set inside the square").
+#[test]
+fn max_bounds_inside_the_identity_keep_the_center_or_with_screen_the_view() {
+    for (mode, corner) in [(ConstrainMode::HeightOnly, 10.0), (ConstrainMode::Screen, 10.0 - 100.0 * 180.0 / 8192.0)] {
+        let run_loop = Queue::<()>::new();
+        let options = MapOptions { size: Size::new(200, 200), constrain_mode: mode, ..Default::default() };
+        let mut map = Map::with_file_source(
+            StubFileSource::on_queue(&run_loop, ResponseType::Asynchronous),
+            options,
+            crate::tests::registry(),
+            &crate::map::tests::pool(),
+        )
+        .unwrap();
+        map.load_style_json(&style("identity", [0.0, 0.0], 4.0));
+        let bounds = LatLngBounds::hull(ll(-10.0, -10.0), ll(10.0, 10.0));
+        map.set_bounds(&BoundOptions { bounds: Some(bounds), ..BoundOptions::default() }).unwrap();
+
+        map.jump_to(&CameraOptions { center: Some(ll(80.0, 80.0)), ..CameraOptions::default() });
+        let center = map.transform_state().view().center(WrapMode::Unwrapped);
+        assert_near(corner, center.latitude(), 1e-6);
+        assert_near(corner, center.longitude(), 1e-6);
+    }
+}
+
+/// GL JS's "keeps a center on the far side of the pole inside maxBounds of
+/// the cap north of 60N" (`src/ui/map_tests/map_projection.test.ts`).
+#[test]
+fn a_center_beyond_the_pole_stays_inside_the_max_bounds_of_a_polar_cap() {
+    let run_loop = Queue::<()>::new();
+    let mut map = map(512, vec![crs::polar_stereographic("test:polar")], &run_loop);
+    map.load_style_json(&style("test:polar", [0.0, 70.0], 3.0));
+    let cap = LatLngBounds::hull(ll(60.0, -180.0), ll(90.0, 180.0));
+    map.set_bounds(&BoundOptions { bounds: Some(cap), ..BoundOptions::default() }).unwrap();
+
+    map.jump_to(&CameraOptions { center: Some(ll(70.0, 45.0)), ..CameraOptions::default() });
+    let center = map.transform_state().view().center(WrapMode::Unwrapped);
+    assert_near(70.0, center.latitude(), 1e-6);
+    assert_near(45.0, center.longitude(), 1e-6);
 }

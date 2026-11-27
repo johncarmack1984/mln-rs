@@ -309,3 +309,19 @@ fn the_view_stays_inside_a_polar_cap_in_screen_mode() {
     let bottom = transform.screen_coordinate_to_lat_lng(&sc(256.0, 512.0), WrapMode::Unwrapped).unwrap();
     assert_near(world_box.max.y, world.world_from_lat_lng(&bottom).y, 1e-6);
 }
+
+#[test]
+fn a_registered_projection_stays_flat_in_a_flipped_viewport() {
+    let mut transform = transform_in(identity(), 512, 512);
+    transform.jump_to(&camera(45.0, 45.0, 1.0));
+
+    transform.set_viewport_mode(ViewportMode::FlippedY);
+    assert_eq!("identity", transform.view().world().name());
+    assert!(!transform.view().is_globe());
+    assert_near(45.0, center(&transform).latitude(), 1e-9);
+    assert_near(45.0, center(&transform).longitude(), 1e-9);
+
+    transform.set_viewport_mode(ViewportMode::Default);
+    assert_eq!("identity", transform.view().world().name());
+    assert!(!transform.view().is_globe());
+}

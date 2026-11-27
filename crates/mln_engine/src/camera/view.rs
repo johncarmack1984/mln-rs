@@ -983,6 +983,19 @@ impl View {
         (ScreenCoordinate::new(p.x / p.w, f64::from(self.params.size.height) - p.y / p.w), p)
     }
 
+    /// The screen point, measured from the bottom edge (y up), of a place in
+    /// the world square at sea level on the flat map; zero while the size is
+    /// empty.
+    pub(crate) fn world_to_screen_coordinate(&self, world: &Point<f64>) -> ScreenCoordinate {
+        if self.params.size.is_empty() {
+            return ScreenCoordinate::new(0.0, 0.0);
+        }
+        let world_size = Projection::world_size(self.params.scale);
+        let p = self.matrices.coord
+            * DVec4::new(world.x * world_size / TILE_SIZE_D, world.y * world_size / TILE_SIZE_D, 0.0, 1.0);
+        ScreenCoordinate::new(p.x / p.w, f64::from(self.params.size.height) - p.y / p.w)
+    }
+
     /// Whether the globe hides a location from the camera; a Mercator view
     /// hides nothing.
     #[must_use]

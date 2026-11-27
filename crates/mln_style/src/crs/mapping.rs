@@ -50,6 +50,17 @@ pub struct WorldBox {
     pub max: Point<f64>,
 }
 
+/// A lng/lat box as places in the world square
+/// ([`CrsMapping::lng_lat_box_samples`]).
+#[derive(Clone, Debug, PartialEq)]
+pub struct BoxSamples {
+    /// The box's samples, row by row from its north-west corner.
+    pub points: Vec<Point<f64>>,
+    /// How far, in world units, the box's edges stray from the lines
+    /// between neighboring samples.
+    pub bulge: f64,
+}
+
 /// How lng/lat maps to and from the world square of a registered projection,
 /// where tile 0/0/0 spans 0 to 1 on both axes: world x and y are the CRS's
 /// coordinates from its tile matrix set's origin, over the extent at zoom 0,
@@ -155,6 +166,23 @@ impl CrsMapping {
     /// a projection runs off to infinity.
     #[must_use]
     pub fn lng_lat_box_to_world_box(&self, bounds: &LatLngBounds) -> WorldBox {
+        let BoxSamples { points, bulge } = self.lng_lat_box_samples(bounds);
+        let mut min = Point::new(f64::INFINITY, f64::INFINITY);
+        let mut max = Point::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
+        for point in &points {
+            min = Point::new(min.x.min(point.x), min.y.min(point.y));
+            max = Point::new(max.x.max(point.x), max.y.max(point.y));
+        }
+        WorldBox { min: Point::new(min.x - bulge, min.y - bulge), max: Point::new(max.x + bulge, max.y + bulge) }
+    }
+
+    /// The places in the world square of a lng/lat box sampled as
+    /// [`lng_lat_box_to_world_box`](Self::lng_lat_box_to_world_box) samples
+    /// it, and how far its edges stray from the lines between neighboring
+    /// samples, which a shape that holds the samples grows by to hold the
+    /// box.
+    #[must_use]
+    pub fn lng_lat_box_samples(&self, bounds: &LatLngBounds) -> BoxSamples {
         let longitude_at = |step: usize| {
             if step == BOX_SAMPLE_STEPS {
                 bounds.east()
@@ -211,13 +239,7 @@ impl CrsMapping {
                 bulge = f64::max(bulge, distance);
             }
         }
-        let mut min = Point::new(f64::INFINITY, f64::INFINITY);
-        let mut max = Point::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
-        for point in grid {
-            min = Point::new(min.x.min(point[0]), min.y.min(point[1]));
-            max = Point::new(max.x.max(point[0]), max.y.max(point[1]));
-        }
-        WorldBox { min: Point::new(min.x - bulge, min.y - bulge), max: Point::new(max.x + bulge, max.y + bulge) }
+        BoxSamples { points: grid.iter().map(|point| Point::new(point[0], point[1])).collect(), bulge }
     }
 
     /// The CRS position of a place in the world square.

@@ -756,6 +756,14 @@ impl Transform {
         point
     }
 
+    /// The screen point (y down) of a place in the world square, at sea
+    /// level on the flat map.
+    pub(crate) fn world_to_screen_coordinate(&self, world: &Point<f64>) -> ScreenCoordinate {
+        let mut point = self.state.view().world_to_screen_coordinate(world);
+        point.y = f64::from(self.state.view().size().height) - point.y;
+        point
+    }
+
     /// The location under `point`, in screen coordinates (y down).
     /// Fails with [`ErrorKind::InvalidArgument`](mln_style::error::ErrorKind) for a NaN
     /// or infinite point.
